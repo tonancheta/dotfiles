@@ -21,6 +21,19 @@ if ! command -v gemini &> /dev/null; then
     npm install -g @google/gemini-cli
 fi
 
+# 1c. Force the Gemini CLI to use GEMINI_API_KEY instead of OAuth.
+# On first run it defaults ~/.gemini/settings.json to "oauth-personal", which
+# silently ignores GEMINI_API_KEY and fails with a 401 "expected OAuth 2 access
+# token" error. Merge (not overwrite) so any other gemini CLI settings survive.
+mkdir -p "$HOME/.gemini"
+if [ -f "$HOME/.gemini/settings.json" ]; then
+    jq '.security.auth.selectedType = "gemini-api-key"' "$HOME/.gemini/settings.json" \
+        > "$HOME/.gemini/settings.json.tmp" && mv "$HOME/.gemini/settings.json.tmp" "$HOME/.gemini/settings.json"
+else
+    echo '{"security":{"auth":{"selectedType":"gemini-api-key"}}}' > "$HOME/.gemini/settings.json"
+fi
+echo "✅ Set Gemini CLI auth type to gemini-api-key"
+
 # 2. Ensure ~/.claude directory exists
 mkdir -p "$HOME/.claude"
 

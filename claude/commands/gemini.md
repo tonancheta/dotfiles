@@ -5,7 +5,11 @@ allowed-tools: Bash(gemini:*)
 ---
 Task for Gemini, not you: $ARGUMENTS
 
-Run it via the Bash tool: `gemini -p "$ARGUMENTS"`
+Run it via the Bash tool: `gemini --skip-trust -p "$ARGUMENTS"`
+
+(`--skip-trust` bypasses the Gemini CLI's own per-directory trust prompt, which has no
+way to be answered in this headless invocation — Claude Code's own trust model already
+covers this.)
 
 Gemini's CLI has its own large context window and can read files/directories itself
 (it supports `@path/to/file` and `@path/to/dir` inside the prompt) — prefer pointing it
