@@ -1,0 +1,7 @@
+{
+  "customCommands": {
+    "gemini": "curl -s \"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=$GEMINI_API_KEY\" -H \"Content-Type: application/json\" -d \"{\\\"contents\\\":[{\\\"parts\\\":[{\\\"text\\\":\\\"$PROMPT\\\"}]}]}\" | jq -r '.candidates[0].content.parts[0].text'",
+    "deepseek": "curl -s https://api.deepseek.com/v1/chat/completions -H \"Authorization: Bearer $DEEPSEEK_API_KEY\" -H \"Content-Type: application/json\" -d \"{\\\"model\\\":\\\"deepseek-chat\\\",\\\"messages\\\":[{\\\"role\\\":\\\"user\\\",\\\"content\\\":\\\"$PROMPT\\\"}]}\" | jq -r '.choices[0].message.content'",
+    "deepseek-r": "curl -s https://api.deepseek.com/v1/chat/completions -H \"Authorization: Bearer $DEEPSEEK_API_KEY\" -H \"Content-Type: application/json\" -d \"{\\\"model\\\":\\\"deepseek-reasoner\\\",\\\"messages\\\":[{\\\"role\\\":\\\"user\\\",\\\"content\\\":\\\"$PROMPT\\\"}]}\" | jq -r '.choices[0].message.content'"
+  }
+}
