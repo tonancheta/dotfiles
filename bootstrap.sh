@@ -15,6 +15,12 @@ if ! command -v jq &> /dev/null; then
     fi
 fi
 
+# 1b. Install the Gemini CLI (required by claude/commands/gemini.md)
+if ! command -v gemini &> /dev/null; then
+    echo "📦 Installing @google/gemini-cli..."
+    npm install -g @google/gemini-cli
+fi
+
 # 2. Ensure ~/.claude directory exists
 mkdir -p "$HOME/.claude"
 
@@ -28,6 +34,24 @@ fi
 if [ -f "$DOTFILES_DIR/claude/CLAUDE.md" ]; then
     ln -sf "$DOTFILES_DIR/claude/CLAUDE.md" "$HOME/.claude/CLAUDE.md"
     echo "✅ Symlinked ~/.claude/CLAUDE.md"
+fi
+
+# 5. Symlink commands/ (whole directory, so new commands need no bootstrap.sh change)
+if [ -d "$DOTFILES_DIR/claude/commands" ]; then
+    rm -rf "$HOME/.claude/commands"
+    ln -sf "$DOTFILES_DIR/claude/commands" "$HOME/.claude/commands"
+    echo "✅ Symlinked ~/.claude/commands"
+fi
+
+# 6. Symlink scripts/ and install their dependencies (node_modules is gitignored, not committed)
+if [ -d "$DOTFILES_DIR/claude/scripts" ]; then
+    rm -rf "$HOME/.claude/scripts"
+    ln -sf "$DOTFILES_DIR/claude/scripts" "$HOME/.claude/scripts"
+    echo "✅ Symlinked ~/.claude/scripts"
+    if [ -f "$DOTFILES_DIR/claude/scripts/package.json" ] && command -v npm &> /dev/null; then
+        echo "📦 Installing scripts/ dependencies..."
+        (cd "$DOTFILES_DIR/claude/scripts" && npm install)
+    fi
 fi
 
 echo "🎉 Claude Code environment successfully configured!"
