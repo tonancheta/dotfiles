@@ -56,10 +56,16 @@ if ! command -v jq &> /dev/null; then
     fi
 fi
 
-# 1b. Install the Gemini CLI (required by claude/commands/gemini.md)
+# 1b. Install the Gemini CLI (required by claude/commands/gemini.md; OMP's own
+# "gemini" agent talks to the Google API directly and does not need this CLI).
+# Best-effort: an install failure here (flaky registry, or npm's refusal to
+# run under WSL 1) must not abort the rest of bootstrap via `set -e`, which
+# also sets up the independent OMP environment below.
 if ! command -v gemini &> /dev/null; then
     echo "📦 Installing @google/gemini-cli..."
-    npm install -g @google/gemini-cli
+    if ! npm install -g @google/gemini-cli; then
+        echo "⚠️  @google/gemini-cli install failed — Claude Code's /gemini command won't work here (OMP's /gemini agent is unaffected). If this is WSL 1, npm refuses to run under it: upgrade with 'wsl --set-version <distro> 2' from Windows, then re-run bootstrap.sh."
+    fi
 fi
 
 # 1c. Force the Gemini CLI to use GEMINI_API_KEY instead of OAuth.
