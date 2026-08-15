@@ -6,19 +6,29 @@ generation tasks to Gemini, DeepSeek, and NVIDIA-hosted Nemotron.
 
 ## Routing Rules
 1. **Repository Audits & Code Reviews -> `/gemini`**
-   - Use `/gemini` for large file reviews, monorepo context scanning, or reading massive log files via the Gemini CLI.
+   - Use `/gemini` for large file reviews, monorepo context scanning, or reading massive log files.
+   - Dispatches via the `task` tool to the `gemini` OMP agent (`omp/agent/agents/gemini.md`,
+     `modelRoles.gemini` in `config.yml`, Google `gemini-3-pro-preview`).
    - Example: `/gemini "Review the changes in src/ controller for security flaws."`
+   - Requires `GEMINI_API_KEY` in the shell environment or `~/.omp/agent/.env` (per machine, not committed).
 
 2. **Test Generation & Documentation -> `/deepseek`**
-   - Use `/deepseek` for writing unit tests, docstrings, or routine feature boilerplate via DeepSeek-V3.
+   - Use `/deepseek` for writing unit tests, docstrings, or routine feature boilerplate.
+   - Dispatches via the `task` tool to the `deepseek` OMP agent (`omp/agent/agents/deepseek.md`,
+     `modelRoles.deepseek` in `config.yml`, `deepseek-v4-flash`).
    - Example: `/deepseek "Write Jest unit tests for services/auth.ts."`
+   - Requires `DEEPSEEK_API_KEY` in the shell environment or `~/.omp/agent/.env` (per machine, not committed).
 
 3. **Complex Logic & Debugging -> `/deepseek-r`**
-   - Use `/deepseek-r` for heavy algorithmic reasoning or complex bug investigations via DeepSeek-R1.
+   - Use `/deepseek-r` for heavy algorithmic reasoning or complex bug investigations.
+   - Dispatches via the `task` tool to the `deepseek-r` OMP agent (`omp/agent/agents/deepseek-r.md`,
+     `modelRoles.deepseek-r` in `config.yml`, `deepseek-v4-pro`).
    - Example: `/deepseek-r "Explain why this database query causes deadlocks."`
+   - Requires `DEEPSEEK_API_KEY` in the shell environment or `~/.omp/agent/.env` (per machine, not committed).
 
 4. **File Writes & Orchestration -> Native agent**
    - Use the native session (OMP or Claude Code) to write edited files to disk, run local git commands, and manage terminal execution.
+   - Rules 1-3 and 5 are read-only (`read, grep, glob, lsp`): they report findings/content back to you, not to disk.
 
 5. **Second-Opinion Review -> `/nemotron`**
    - Use `/nemotron` to cross-check a diff, design decision, or debugging conclusion via
@@ -27,8 +37,10 @@ generation tasks to Gemini, DeepSeek, and NVIDIA-hosted Nemotron.
      reviewer (rules 1-3) would share.
    - Do not route primary audits, test generation, or first-pass debugging here — it is a
      checker, not a replacement for rules 1-3.
+   - Dispatches via the `task` tool to the `nemotron` OMP agent (`omp/agent/agents/nemotron.md`,
+     `modelRoles.nemotron` in `config.yml`).
    - Example: `/nemotron "Check this auth diff for race conditions and edge cases."`
-   - Requires `NVIDIA_API_KEY` in `~/.omp/agent/.env` (per machine, not committed).
+   - Requires `NVIDIA_API_KEY` in the shell environment or `~/.omp/agent/.env` (per machine, not committed).
 
 # graphify
 - **graphify** (`~/.omp/agent/skills/graphify/SKILL.md` or `~/.claude/skills/graphify/SKILL.md`) - any input to knowledge graph. Trigger: `/graphify`

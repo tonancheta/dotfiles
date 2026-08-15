@@ -151,9 +151,22 @@ if command -v setx &> /dev/null; then
     echo "✅ Set PI_CONFIG_FILES via setx (new shells only — restart your terminal)"
 fi
 
-# 10. NVIDIA API key is per-machine, not committed. Remind rather than fail.
-if [ ! -f "$HOME/.omp/agent/.env" ] || ! grep -Eq "NVIDIA_API_KEY=\"?nvapi-" "$HOME/.omp/agent/.env" 2>/dev/null; then
-    echo "⚠️  NVIDIA_API_KEY not found in ~/.omp/agent/.env — add it manually to use /nemotron."
-fi
+# 10. API keys for the AGENTS.md task-routing agents (nemotron, gemini, deepseek,
+# deepseek-r) are per-machine, not committed. OMP resolves each from the shell
+# environment first, then ~/.omp/agent/.env — either location satisfies the agent.
+# Remind rather than fail if a key is in neither place.
+check_api_key() {
+    local var_name="$1" key_prefix="$2" agent_hint="$3"
+    if [ -n "${!var_name:-}" ]; then
+        return 0
+    fi
+    if [ -f "$HOME/.omp/agent/.env" ] && grep -Eq "${var_name}=\"?${key_prefix}[A-Za-z0-9]" "$HOME/.omp/agent/.env" 2>/dev/null; then
+        return 0
+    fi
+    echo "⚠️  ${var_name} not found (shell env or ~/.omp/agent/.env) — add it manually to use ${agent_hint}."
+}
+check_api_key NVIDIA_API_KEY "nvapi-" "/nemotron"
+check_api_key GEMINI_API_KEY "" "/gemini"
+check_api_key DEEPSEEK_API_KEY "sk-" "/deepseek and /deepseek-r"
 
 echo "🎉 OMP environment successfully configured!"

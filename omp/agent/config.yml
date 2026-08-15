@@ -5,3 +5,6 @@
 # wholesale over an existing config.yml.
 modelRoles:
   nemotron: nvidia/llama-3.3-nemotron-super-49b-v1.5:high
+  gemini: google/gemini-3-pro-preview:high
+  deepseek: deepseek/deepseek-v4-flash:low
+  deepseek-r: deepseek/deepseek-v4-pro:max
