@@ -1,0 +1,7 @@
+# Shared OMP model-role config, synced across machines via bootstrap.sh.
+# Machine-specific settings (shellPath, theme, symbolPreset) stay in the
+# machine-local ~/.omp/agent/config.yml and are NOT overwritten by this file
+# — merge any new shared keys here by hand instead of symlinking this file
+# wholesale over an existing config.yml.
+modelRoles:
+  nemotron: nvidia/llama-3.3-nemotron-super-49b-v1.5:high
