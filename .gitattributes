@@ -1,0 +1,5 @@
+# Force LF line endings in the working tree on every platform, regardless of
+# a user's global core.autocrlf. Without this, Windows checkouts convert
+# LF -> CRLF and corrupt bootstrap.sh (bash chokes on \r in the shebang and
+# every subsequent line): "$'\r': command not found", syntax errors on `{`.
+* text=auto eol=lf
