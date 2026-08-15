@@ -152,7 +152,7 @@ if command -v setx &> /dev/null; then
 fi
 
 # 10. NVIDIA API key is per-machine, not committed. Remind rather than fail.
-if [ ! -f "$HOME/.omp/agent/.env" ] || ! grep -q "NVIDIA_API_KEY=nvapi-" "$HOME/.omp/agent/.env" 2>/dev/null; then
+if [ ! -f "$HOME/.omp/agent/.env" ] || ! grep -Eq "NVIDIA_API_KEY=\"?nvapi-" "$HOME/.omp/agent/.env" 2>/dev/null; then
     echo "⚠️  NVIDIA_API_KEY not found in ~/.omp/agent/.env — add it manually to use /nemotron."
 fi
 
