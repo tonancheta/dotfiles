@@ -138,6 +138,21 @@ if [ -d "$DOTFILES_DIR/omp/agent/commands" ]; then
     echo "✅ Linked ~/.omp/agent/commands"
 fi
 
+# 8b. Symlink FLUX helper scripts (whole directory, so new scripts need no
+# bootstrap.sh change). Used by the /flux command; pure-stdlib Python 3, no deps.
+if [ -d "$DOTFILES_DIR/omp/agent/scripts" ]; then
+    link_path "$DOTFILES_DIR/omp/agent/scripts" "$HOME/.omp/agent/scripts"
+    echo "✅ Linked ~/.omp/agent/scripts"
+fi
+
+# 8c. Symlink models.yml (shared model registry — adds DeepSeek R1 for /diagram).
+# Unlike config.yml this holds no machine-specific settings, so linking it
+# wholesale is safe and keeps ~/.omp/agent/models.yml in sync across machines.
+if [ -f "$DOTFILES_DIR/omp/agent/models.yml" ]; then
+    link_path "$DOTFILES_DIR/omp/agent/models.yml" "$HOME/.omp/agent/models.yml"
+    echo "✅ Linked ~/.omp/agent/models.yml"
+fi
+
 # 9. Layer the shared modelRoles config on top of the machine-local
 # ~/.omp/agent/config.yml via PI_CONFIG_FILES, instead of symlinking
 # config.yml itself — config.yml also holds machine-specific settings
@@ -158,7 +173,7 @@ if command -v setx &> /dev/null; then
 fi
 
 # 10. API keys for the AGENTS.md task-routing agents (nemotron, gemini, deepseek,
-# deepseek-r) are per-machine, not committed. OMP resolves each from the shell
+# deepseek-r, diagram) and the /flux script are per-machine, not committed. OMP
 # environment first, then ~/.omp/agent/.env — either location satisfies the agent.
 # Remind rather than fail if a key is in neither place.
 check_api_key() {
@@ -171,7 +186,7 @@ check_api_key() {
     fi
     echo "⚠️  ${var_name} not found (shell env or ~/.omp/agent/.env) — add it manually to use ${agent_hint}."
 }
-check_api_key NVIDIA_API_KEY "nvapi-" "/nemotron"
+check_api_key NVIDIA_API_KEY "nvapi-" "/nemotron, /diagram, and /flux"
 check_api_key GEMINI_API_KEY "" "/gemini"
 check_api_key DEEPSEEK_API_KEY "sk-" "/deepseek and /deepseek-r"
 

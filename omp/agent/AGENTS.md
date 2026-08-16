@@ -42,6 +42,25 @@ generation tasks to Gemini, DeepSeek, and NVIDIA-hosted Nemotron.
    - Example: `/nemotron "Check this auth diff for race conditions and edge cases."`
    - Requires `NVIDIA_API_KEY` in the shell environment or `~/.omp/agent/.env` (per machine, not committed).
 
+6. **Technical Diagrams -> `/diagram`**
+   - Use `/diagram` to turn architecture, flows, sequences, ER models, or state
+     machines into renderable diagram-as-code (Mermaid, Graphviz/DOT, PlantUML, D2).
+   - Dispatches via the `task` tool to the `diagram` OMP agent (`omp/agent/agents/diagram.md`,
+     `modelRoles.diagram` in `config.yml`, NVIDIA-hosted `deepseek-ai/deepseek-r1`). The model
+     is registered in `omp/agent/models.yml` (symlinked to `~/.omp/agent/models.yml`).
+   - DeepSeek R1 is a text model: it emits diagram *source*, not images. Render/save it yourself.
+   - Example: `/diagram "Sequence diagram of the OAuth refresh flow in services/auth.ts."`
+   - Requires `NVIDIA_API_KEY` in the shell environment or `~/.omp/agent/.env` (per machine, not committed).
+
+7. **Image Generation -> `/flux`**
+   - Use `/flux` to generate an image from a text prompt with FLUX.1 on NVIDIA Build.
+   - Runs `~/.omp/agent/scripts/flux.py` (symlinked from `omp/agent/scripts/flux.py`), which POSTs to
+     NVIDIA's Visual GenAI endpoint (`https://ai.api.nvidia.com/v1/genai/black-forest-labs/flux.1-dev`)
+     and saves the returned image to the current directory. FLUX.1 is a REST image API, not a chat
+     model, so it is a script/command — not a `models.yml` model or a task-routing agent.
+   - Example: `/flux "isometric 3D icon of a database, soft studio lighting" --width 1024 --height 1024`
+   - Requires `NVIDIA_API_KEY` in the shell environment or `~/.omp/agent/.env` (per machine, not committed).
+
 # graphify
 - **graphify** (`~/.omp/agent/skills/graphify/SKILL.md` or `~/.claude/skills/graphify/SKILL.md`) - any input to knowledge graph. Trigger: `/graphify`
 When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.

@@ -1,0 +1,32 @@
+# Shared OMP model registry, synced across machines via bootstrap.sh
+# (symlinked to ~/.omp/agent/models.yml). This file registers models the
+# bundled catalog does not ship. Credentials are per-machine and live in the
+# shell environment or ~/.omp/agent/.env — never here.
+#
+# `nvidia` is a built-in OMP provider (env NVIDIA_API_KEY, OpenAI-compatible
+# base https://integrate.api.nvidia.com/v1) — that is how /nemotron already
+# routes. The bundled catalog does not include DeepSeek R1, so we add it here
+# for /diagram. Re-declaring the provider's baseUrl/api/apiKey matches the
+# built-in values, so existing nvidia models (e.g. nemotron) are unaffected;
+# the DeepSeek R1 entry is simply appended.
+#
+# NOTE: image generation (FLUX.1) is NOT configured here. models.yml only
+# registers chat/completion models; FLUX.1 on NVIDIA Build is a REST image API
+# (Visual GenAI NIM), so it ships as ~/.omp/agent/scripts/flux.py + /flux.
+providers:
+  nvidia:
+    baseUrl: https://integrate.api.nvidia.com/v1
+    api: openai-completions
+    apiKey: NVIDIA_API_KEY
+    models:
+      - id: deepseek-ai/deepseek-r1
+        name: DeepSeek R1 (NVIDIA)
+        reasoning: true
+        input: [text]
+        contextWindow: 128000
+        maxTokens: 16384
+        cost:
+          input: 0
+          output: 0
+          cacheRead: 0
+          cacheWrite: 0

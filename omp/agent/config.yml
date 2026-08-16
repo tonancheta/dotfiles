@@ -8,3 +8,4 @@ modelRoles:
   gemini: google/gemini-3-pro-preview:high
   deepseek: deepseek/deepseek-v4-flash:low
   deepseek-r: deepseek/deepseek-v4-pro:max
+  diagram: nvidia/deepseek-ai/deepseek-r1
