@@ -246,13 +246,18 @@ fi
 # config.yml itself — config.yml also holds machine-specific settings
 # (shellPath, theme) that must not be clobbered by another machine's copy.
 # PI_CONFIG_FILES overlays deep-merge objects (modelRoles) on top of the
-# global config, so this is additive, not destructive. Idempotent: only
-# appends if not already present.
+# global config, so this is additive, not destructive. Self-healing: if the
+# repo was cloned/moved to a different path since the last run (e.g. a
+# leftover ~/Development/dotfiles clone that no longer exists), the old
+# export line is replaced rather than left stale — grep-if-present alone
+# would skip rewriting because the *variable name* is still found, even
+# though the *path* it points to is wrong.
 OMP_CONFIG_LINE="export PI_CONFIG_FILES=\"$DOTFILES_DIR/omp/agent/config.yml\""
 for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
-    if [ -f "$rc" ] && ! grep -qF "PI_CONFIG_FILES" "$rc"; then
+    if [ -f "$rc" ] && ! grep -qF "$OMP_CONFIG_LINE" "$rc"; then
+        sed -i.bak -e '/^# OMP shared config (dotfiles)$/d' -e '/^export PI_CONFIG_FILES=/d' "$rc" && rm -f "$rc.bak"
         printf '\n# OMP shared config (dotfiles)\n%s\n' "$OMP_CONFIG_LINE" >> "$rc"
-        echo "✅ Added PI_CONFIG_FILES to $rc"
+        echo "✅ Set PI_CONFIG_FILES in $rc"
     fi
 done
 if command -v setx &> /dev/null; then
