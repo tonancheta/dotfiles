@@ -156,6 +156,20 @@ if [ -f "$DOTFILES_DIR/omp/agent/models.yml" ]; then
     echo "✅ Linked ~/.omp/agent/models.yml"
 fi
 
+# 8d. Re-merge any drift back into ~/.claude/skills (e.g. `graphify install
+# --platform claude` re-creating it on self-update) into the canonical
+# ~/.omp/skills, then remove ~/.claude/skills again. OMP-only: native Claude
+# Code without OMP only reads ~/.claude/skills for its own skill discovery,
+# so running this on an OMP-less machine would silently break that — skip
+# there and leave ~/.claude/skills as Claude Code's only functional copy.
+if [ -d "$DOTFILES_DIR/omp/agent/scripts" ]; then
+    if command -v omp &> /dev/null; then
+        bash "$HOME/.omp/agent/scripts/consolidate-claude-skills.sh" || echo "⚠️  consolidate-claude-skills.sh reported an issue (see above) — check ~/.claude/skills manually."
+    else
+        echo "ℹ️  Skipping ~/.claude/skills consolidation: omp not found on this machine (Claude Code needs ~/.claude/skills to stay populated here)."
+    fi
+fi
+
 # 9. Layer the shared modelRoles config on top of the machine-local
 # ~/.omp/agent/config.yml via PI_CONFIG_FILES, instead of symlinking
 # config.yml itself — config.yml also holds machine-specific settings
