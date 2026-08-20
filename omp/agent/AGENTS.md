@@ -76,6 +76,17 @@ This is a default, not an absolute — judgment calls in either direction are fi
 - **graphify** (`~/.omp/skills/graphify/SKILL.md`) - any input to knowledge graph. Trigger: `/graphify`
 When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
 
+## Memory via graphify
+graphify is the memory system for this project, not just a diagramming tool. Two obligations:
+- **Recall first.** Before answering any question about this codebase's architecture, history, cross-file relationships, or past decisions, check whether `graphify-out/graph.json` exists and if so run `/graphify query "<question>"` (or `/graphify path`/`/graphify explain` for a specific relationship/node) before re-deriving the answer from scratch by hand.
+- **Preserve proactively.** When you learn something worth remembering across sessions (an architecture decision, a gotcha, a non-obvious convention, an external doc/URL with lasting relevance), persist it into the graph instead of only stating it in chat: `/graphify <path> --update` after code changes, or `/graphify add <url>` for external content. Don't let something you'd want to recall next session live only in this transcript.
+
+# Web UI/UX Design
+Whenever designing, redesigning, critiquing, or polishing a **web** frontend (websites, landing pages, dashboards, product UI, components), consult and apply both skills below together — treat them as required references for that work, not optional flavor:
+- **impeccable** (`~/.claude/skills/impeccable/SKILL.md`) — design vocabulary and 23 commands (`/impeccable init`, `craft`, `critique`, `audit`, `polish`, `bolder`, `quieter`, etc.) plus 59 deterministic anti-pattern detector rules against generic "AI slop" (default fonts, purple-to-blue gradients, nested cards, gray-on-color text).
+- **design-taste-frontend** ("taste") (`~/.claude/skills/design-taste-frontend/SKILL.md`) — reads the brief, infers design direction (brand vibe, layout variance, motion intensity, visual density), and enforces anti-slop layout/typography/motion rules.
+Run `/impeccable audit` or `/impeccable critique` on existing UI before shipping changes to it, not just on new builds.
+
 # Frappe Bench Troubleshooting
 When a Frappe bench dev site misbehaves in ways that don't point to an obvious code change — blank `/desk` page, login form resetting with no error, JS console errors like `$(...).dropdown is not a function` — check these in order before deep app-level debugging, especially after moving/copying a bench directory:
 1. **Port mismatch**: compare `sites/common_site_config.json`'s `webserver_port` against the actual bound port in `Procfile`'s `web: bench serve --port <port>` line.

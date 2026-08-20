@@ -156,12 +156,29 @@ if [ -f "$DOTFILES_DIR/omp/agent/models.yml" ]; then
     echo "✅ Linked ~/.omp/agent/models.yml"
 fi
 
-# 8d. Re-merge any drift back into ~/.claude/skills (e.g. `graphify install
+# 8d. Symlink authored web design skills (impeccable, taste) into
+# ~/.claude/skills. Universal — no OMP gate: these are dotfiles-owned
+# content (not third-party drift), read natively by Claude Code everywhere
+# and by OMP's own "claude" skill provider, so every machine gets the same
+# two design skills available whenever it's doing web UI/UX work.
+mkdir -p "$HOME/.claude/skills"
+if [ -d "$DOTFILES_DIR/claude/skills" ]; then
+    for skill_dir in "$DOTFILES_DIR"/claude/skills/*/; do
+        skill_name="$(basename "$skill_dir")"
+        link_path "$DOTFILES_DIR/claude/skills/$skill_name" "$HOME/.claude/skills/$skill_name"
+        echo "✅ Linked ~/.claude/skills/$skill_name"
+    done
+fi
+
+# 8e. Re-merge any drift back into ~/.claude/skills (e.g. `graphify install
 # --platform claude` re-creating it on self-update) into the canonical
 # ~/.omp/skills, then remove ~/.claude/skills again. OMP-only: native Claude
 # Code without OMP only reads ~/.claude/skills for its own skill discovery,
 # so running this on an OMP-less machine would silently break that — skip
 # there and leave ~/.claude/skills as Claude Code's only functional copy.
+# consolidate-claude-skills.sh itself skips symlinked entries (step 8d's
+# impeccable/taste), so it only ever sweeps real (third-party-written)
+# directories like a fresh graphify self-update.
 if [ -d "$DOTFILES_DIR/omp/agent/scripts" ]; then
     if command -v omp &> /dev/null; then
         bash "$HOME/.omp/agent/scripts/consolidate-claude-skills.sh" || echo "⚠️  consolidate-claude-skills.sh reported an issue (see above) — check ~/.claude/skills manually."

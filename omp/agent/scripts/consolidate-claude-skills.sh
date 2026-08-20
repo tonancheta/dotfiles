@@ -1,6 +1,7 @@
 #!/bin/bash
 # Merge any content that has drifted back into ~/.claude/skills into the
-# canonical ~/.omp/skills, then remove ~/.claude/skills.
+# canonical ~/.omp/skills, then remove the drifted entries from
+# ~/.claude/skills.
 #
 # Why this exists: OMP's native skill provider reads ~/.omp/skills (highest
 # discovery priority); its separate "claude" provider also reads
@@ -9,6 +10,13 @@
 # ~/.claude/skills as their install target and recreate it on every
 # self-update, so this re-merges that drift back to one canonical location
 # instead of letting two copies of the same skill diverge.
+#
+# Symlinked entries under ~/.claude/skills (bootstrap.sh's own
+# claude/skills/* installs, e.g. impeccable, design-taste-frontend) are
+# left untouched: a symlink there means "dotfiles put this here on
+# purpose," not drift, and it must stay put for Claude Code's own skill
+# discovery on OMP-less machines. Only real (non-symlink) directories --
+# i.e. content a third-party installer actually wrote -- count as drift.
 #
 # IMPORTANT — only meaningful on machines that actually run OMP. Native
 # Claude Code without OMP has no concept of ~/.omp/skills at all and reads
@@ -45,7 +53,13 @@ if [ ${#entries[@]} -eq 0 ]; then
 fi
 
 moved=0
+skipped=0
 for entry in "${entries[@]}"; do
+    if [ -L "$entry" ]; then
+        # Dotfiles-managed skill symlink (bootstrap.sh step 8d) -- leave in place.
+        skipped=$((skipped + 1))
+        continue
+    fi
     name="$(basename "$entry")"
     dest="$OMP_SKILLS/$name"
     if [ -e "$dest" ]; then
@@ -58,9 +72,12 @@ for entry in "${entries[@]}"; do
     moved=$((moved + 1))
 done
 
-if [ -z "$(ls -A "$CLAUDE_SKILLS" 2>/dev/null)" ]; then
+remaining_non_symlinks="$(find "$CLAUDE_SKILLS" -mindepth 1 -maxdepth 1 ! -type l 2>/dev/null)"
+if [ -z "$remaining_non_symlinks" ] && [ $skipped -eq 0 ]; then
     rmdir "$CLAUDE_SKILLS"
     echo "consolidate-claude-skills: merged $moved skill(s), removed now-empty $CLAUDE_SKILLS."
+elif [ -z "$remaining_non_symlinks" ]; then
+    echo "consolidate-claude-skills: merged $moved skill(s); left $skipped dotfiles-managed symlink(s) in place under $CLAUDE_SKILLS (expected)."
 else
-    echo "consolidate-claude-skills: WARNING merged $moved skill(s) but $CLAUDE_SKILLS still has unexpected contents: $(ls -A "$CLAUDE_SKILLS")" >&2
+    echo "consolidate-claude-skills: WARNING merged $moved skill(s) but $CLAUDE_SKILLS still has unexpected non-symlink contents: $remaining_non_symlinks" >&2
 fi
