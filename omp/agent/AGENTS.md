@@ -46,9 +46,12 @@ generation tasks to Gemini, DeepSeek, and NVIDIA-hosted Nemotron.
    - Use `/diagram` to turn architecture, flows, sequences, ER models, or state
      machines into renderable diagram-as-code (Mermaid, Graphviz/DOT, PlantUML, D2).
    - Dispatches via the `task` tool to the `diagram` OMP agent (`omp/agent/agents/diagram.md`,
-     `modelRoles.diagram` in `config.yml`, NVIDIA-hosted `deepseek-ai/deepseek-r1`). The model
-     is registered in `omp/agent/models.yml` (symlinked to `~/.omp/agent/models.yml`).
-   - DeepSeek R1 is a text model: it emits diagram *source*, not images. Render/save it yourself.
+     `modelRoles.diagram` in `config.yml`, NVIDIA-hosted `nvidia/nemotron-3-ultra-550b-a55b`).
+     No custom registration needed — the bundled model catalog already ships this one with
+     `reasoning: true`. (Previously DeepSeek R1 via a custom `omp/agent/models.yml` entry;
+     NVIDIA removed DeepSeek R1 from its catalog entirely as of 2026-08-20, so the entry
+     and this model choice were retired together — see `models.yml`'s changelog comment.)
+   - It's a text model: it emits diagram *source*, not images. Render/save it yourself.
    - Example: `/diagram "Sequence diagram of the OAuth refresh flow in services/auth.ts."`
    - Requires `NVIDIA_API_KEY` in the shell environment or `~/.omp/agent/.env` (per machine, not committed).
 
@@ -70,3 +73,19 @@ When a Frappe bench dev site misbehaves in ways that don't point to an obvious c
 1. **Port mismatch**: compare `sites/common_site_config.json`'s `webserver_port` against the actual bound port in `Procfile`'s `web: bench serve --port <port>` line.
 2. **Stale browser site data**: cookies/cache/localStorage for the dev domain can linger from before a port change or move and cause profile-specific JS failures that don't reproduce in Incognito or another browser. Clear via DevTools → Application → Clear site data.
 3. **Stale incremental build**: `bench watch`'s esbuild live-rebuild can leave an inconsistent bundle that looks byte-correct on disk but misbehaves at runtime. Force a clean rebuild with `bench build --app <app> --force` before assuming it's a real code/dependency bug.
+
+# User-Run Terminal Commands (sudo/root-gated or otherwise out of agent reach)
+When a task needs commands the agent cannot run itself (missing sudo password, no
+SSH credentials, interactive prompts, etc.) in this or any other project:
+1. Write the exact commands into a single `.sh` script in the project (e.g.
+   `deploy/setup-foo.sh`), `chmod +x` it. Never hand the user ad-hoc commands to
+   retype or paste output back from — script it.
+2. Make it idempotent/safe to re-run, and `set -euxo pipefail` (or equivalent) so
+   it fails loudly and every command is echoed into its own output.
+3. Tell the user to run it with output redirected to a file the agent names, e.g.:
+     sudo bash path/to/setup-foo.sh > path/to/setup-foo.log 2>&1
+   The file must land somewhere the invoking user's shell owns (redirection happens
+   before `sudo` execs, so plain user-owned paths are readable back by the agent
+   without another round trip — do not have the script itself write the log).
+4. After the user confirms it ran, `read`/`grep` the log file directly instead of
+   asking them to paste output.
