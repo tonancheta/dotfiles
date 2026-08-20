@@ -125,7 +125,7 @@ echo "🚀 Setting up OMP dotfiles..."
 
 mkdir -p "$HOME/.omp/agent"
 
-# 7. Symlink native context file (routing rules, graphify trigger, Frappe notes)
+# 7. Symlink native context file (routing rules, memory setup, Frappe notes)
 if [ -f "$DOTFILES_DIR/omp/agent/AGENTS.md" ]; then
     link_path "$DOTFILES_DIR/omp/agent/AGENTS.md" "$HOME/.omp/agent/AGENTS.md"
     echo "✅ Linked ~/.omp/agent/AGENTS.md"
@@ -189,22 +189,56 @@ if [ -d "$DOTFILES_DIR/claude/skills" ] && command -v omp &> /dev/null; then
     done
 fi
 
-# 8f. Re-merge any drift back into ~/.claude/skills (e.g. `graphify install
-# --platform claude` re-creating it on self-update) into the canonical
-# ~/.omp/skills, then remove ~/.claude/skills again. OMP-only: native Claude
-# Code without OMP only reads ~/.claude/skills for its own skill discovery,
-# so running this on an OMP-less machine would silently break that — skip
-# there and leave ~/.claude/skills as Claude Code's only functional copy.
-# consolidate-claude-skills.sh itself skips symlinked entries (step 8d's
-# impeccable/taste; step 8e's ~/.omp/skills mirrors are never scanned by it
-# at all, since it only reads ~/.claude/skills), so it only ever sweeps real
-# (third-party-written) directories like a fresh graphify self-update.
+# 8f. Re-merge any drift back into ~/.claude/skills (e.g. a third-party
+# `<tool> install --platform claude`-style installer re-creating it on
+# self-update) into the canonical ~/.omp/skills, then remove ~/.claude/skills
+# again. OMP-only: native Claude Code without OMP only reads ~/.claude/skills
+# for its own skill discovery, so running this on an OMP-less machine would
+# silently break that — skip there and leave ~/.claude/skills as Claude
+# Code's only functional copy. consolidate-claude-skills.sh itself skips
+# symlinked entries (step 8d's impeccable/taste; step 8e's ~/.omp/skills
+# mirrors are never scanned by it at all, since it only reads
+# ~/.claude/skills), so it only ever sweeps real (third-party-written)
+# directories left behind by that kind of self-update.
 if [ -d "$DOTFILES_DIR/omp/agent/scripts" ]; then
     if command -v omp &> /dev/null; then
         bash "$HOME/.omp/agent/scripts/consolidate-claude-skills.sh" || echo "⚠️  consolidate-claude-skills.sh reported an issue (see above) — check ~/.claude/skills manually."
     else
         echo "ℹ️  Skipping ~/.claude/skills consolidation: omp not found on this machine (Claude Code needs ~/.claude/skills to stay populated here)."
     fi
+fi
+
+# 8g. Start the Hindsight memory server (OMP memory.backend: hindsight —
+# see omp/agent/config.yml and AGENTS.md's "Memory (Hindsight)" section).
+# Idempotent: does nothing if a `hindsight` container already exists
+# (start/restart a stopped one yourself; this never recreates or updates
+# it in place). Uses Gemini as the LLM backend so no new provider
+# dependency is introduced beyond GEMINI_API_KEY, already required for
+# /gemini (AGENTS.md routing rule 1). Named Docker volume (not a host bind
+# mount) so the embedded Postgres (pg0) just works — no UID 1000
+# permission setup needed.
+if command -v docker &> /dev/null; then
+    if [ -z "$(docker ps -aq -f name='^/hindsight$' 2>/dev/null)" ]; then
+        if [ -n "$GEMINI_API_KEY" ]; then
+            echo "🧠 Starting Hindsight memory server..."
+            docker run -d --pull always --name hindsight --restart unless-stopped \
+                -p 8888:8888 -p 9999:9999 \
+                -e HINDSIGHT_API_LLM_PROVIDER=gemini \
+                -e HINDSIGHT_API_LLM_API_KEY="$GEMINI_API_KEY" \
+                -e HINDSIGHT_API_LLM_MODEL=gemini-3-flash-preview \
+                -e HINDSIGHT_API_WORKER_ID=hindsight-omp \
+                -v hindsight-data:/home/hindsight/.pg0 \
+                ghcr.io/vectorize-io/hindsight:latest > /dev/null \
+                && echo "✅ Started Hindsight (API http://localhost:8888, UI http://localhost:9999)" \
+                || echo "⚠️  Failed to start Hindsight — check 'docker logs hindsight'."
+        else
+            echo "ℹ️  Skipping Hindsight memory server: GEMINI_API_KEY not set in this shell or ~/.omp/agent/.env."
+        fi
+    else
+        echo "ℹ️  Hindsight container already exists — leaving it as-is (docker start/restart it yourself if stopped)."
+    fi
+else
+    echo "ℹ️  Skipping Hindsight memory server: docker not found on this machine."
 fi
 
 # 9. Layer the shared modelRoles config on top of the machine-local

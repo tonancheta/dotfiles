@@ -9,3 +9,14 @@ modelRoles:
   deepseek: deepseek/deepseek-v4-flash:low
   deepseek-r: deepseek/deepseek-v4-pro:max
   diagram: nvidia/nemotron-3-ultra-550b-a55b:high
+
+# Memory: Hindsight-backed autonomous memory (see omp/agent/AGENTS.md's
+# "Memory (Hindsight)" section for the full setup). bootstrap.sh starts a
+# local `hindsight` Docker container (Gemini as its LLM backend, reusing
+# GEMINI_API_KEY — no new provider dependency) on every machine that has
+# docker + GEMINI_API_KEY; this block just points OMP at it. No apiToken:
+# the local container has no auth configured.
+memory:
+  backend: hindsight
+hindsight:
+  apiUrl: http://localhost:8888

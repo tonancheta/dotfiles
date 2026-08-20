@@ -72,14 +72,25 @@ This is a default, not an absolute — judgment calls in either direction are fi
    - Example: `/flux "isometric 3D icon of a database, soft studio lighting" --width 1024 --height 1024`
    - Requires `NVIDIA_API_KEY` in the shell environment or `~/.omp/agent/.env` (per machine, not committed).
 
-# graphify
-- **graphify** (`~/.omp/skills/graphify/SKILL.md`) - any input to knowledge graph. Trigger: `/graphify`
-When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
+# Memory (Hindsight)
+Autonomous memory is on (`memory.backend: hindsight` in `config.yml`) backed by a local
+`hindsight` Docker container that bootstrap.sh starts and keeps restarted
+(`ghcr.io/vectorize-io/hindsight:latest`, API on `localhost:8888`, UI on `localhost:9999`,
+Gemini as its LLM backend via `GEMINI_API_KEY` — no separate key needed). This is a
+background system, not a manual workflow:
+- `recall`/`retain`/`reflect` tools are exposed automatically; the primary session
+  auto-recalls on its first turn and auto-retains conversation turns periodically.
+- Nothing to invoke by hand for routine use. Only reach for `recall`/`retain`/`reflect`
+  explicitly when you need to query or store something outside that automatic cadence.
+- `/memory view` inspects what's currently injected; `/memory stats`/`diagnose` for
+  backend health; container logs via `docker logs hindsight` for the server itself.
+- Bank scoping is per-project-tagged by default (see `omp://memory.md`), so this
+  project's memories don't bleed into an unrelated repo's recall.
 
-## Memory via graphify
-graphify is the memory system for this project, not just a diagramming tool. Two obligations:
-- **Recall first.** Before answering any question about this codebase's architecture, history, cross-file relationships, or past decisions, check whether `graphify-out/graph.json` exists and if so run `/graphify query "<question>"` (or `/graphify path`/`/graphify explain` for a specific relationship/node) before re-deriving the answer from scratch by hand.
-- **Preserve proactively.** When you learn something worth remembering across sessions (an architecture decision, a gotcha, a non-obvious convention, an external doc/URL with lasting relevance), persist it into the graph instead of only stating it in chat: `/graphify <path> --update` after code changes, or `/graphify add <url>` for external content. Don't let something you'd want to recall next session live only in this transcript.
+(Previously graphify's per-repo knowledge-graph skill filled this role. Removed:
+redundant with Hindsight, and its skill discovery was independently found to be
+non-deterministic on `.omp` native provider installs — see the removal decision's
+chat history if resurrecting either tool.)
 
 # Web UI/UX Design
 Whenever designing, redesigning, critiquing, or polishing a **web** frontend (websites, landing pages, dashboards, product UI, components), consult and apply both skills below together — treat them as required references for that work, not optional flavor:
