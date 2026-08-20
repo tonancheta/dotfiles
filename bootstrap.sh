@@ -225,3 +225,24 @@ check_api_key GEMINI_API_KEY "" "/gemini"
 check_api_key DEEPSEEK_API_KEY "sk-" "/deepseek and /deepseek-r"
 
 echo "🎉 OMP environment successfully configured!"
+
+# --- Git hooks (all repos) --------------------------------------------------
+# core.hooksPath points EVERY repo on this machine at one shared hooks dir
+# instead of each repo's own .git/hooks, so a hook added here reaches
+# existing repos immediately -- no per-project install step, and it
+# propagates to other machines via this same bootstrap.sh run.
+#
+# Trade-off, not a bug: this replaces .git/hooks for ALL repos, including
+# ones with their own local hooks. None of this user's repos had a real
+# (non-.sample) local hook as of 2026-08-20. If a project later installs
+# husky/pre-commit/etc., that tool's own core.hooksPath write in the
+# project-local .git/config takes precedence over this global one (normal
+# git config precedence) and our hooks silently stop firing there -- not a
+# conflict, just scoped out for that repo.
+echo "🚀 Setting up shared git hooks..."
+if [ -d "$DOTFILES_DIR/git/hooks" ]; then
+    link_path "$DOTFILES_DIR/git/hooks" "$HOME/.git-hooks"
+    git config --global core.hooksPath "$HOME/.git-hooks"
+    echo "✅ Linked ~/.git-hooks and set core.hooksPath globally"
+fi
+echo "🎉 Git hooks configured!"
