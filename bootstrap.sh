@@ -115,9 +115,12 @@ fi
 echo "🎉 Claude Code environment successfully configured!"
 
 # --- OMP (Oh My Pi) --------------------------------------------------------
-# Same routing rules, agents, and commands, in OMP's native ~/.omp/agent/
-# format (native context files take priority over .claude/CLAUDE.md inside
-# OMP sessions, so this is the source of truth once OMP is in the loop).
+# omp/agent/AGENTS.md is the single canonical source for routing rules, agents,
+# and commands: OMP reads it natively as ~/.omp/agent/AGENTS.md, and
+# ~/.claude/CLAUDE.md (step 4 above) imports this same file via Claude Code's
+# `@~/.omp/agent/AGENTS.md` syntax instead of keeping a separate duplicate copy.
+# This section must run on every machine (even Claude-Code-only ones) so that
+# import target exists.
 echo "🚀 Setting up OMP dotfiles..."
 
 mkdir -p "$HOME/.omp/agent"

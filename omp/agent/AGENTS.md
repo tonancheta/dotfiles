@@ -4,6 +4,14 @@
 Preserve native Claude Pro / Cowork quota by delegating heavy scanning, review, and test
 generation tasks to Gemini, DeepSeek, and NVIDIA-hosted Nemotron.
 
+## Default Rule
+Coding work is distributed to an integrated AI (currently DeepSeek or Gemini) **by default**. Only keep a coding task on the native agent session when one of these exceptions applies:
+- The delegated AI cannot handle the task (unfamiliar framework/convention, needs context too large or too specific to hand off cleanly, output quality is unreliable for the task at hand).
+- The task needs fine-grained precision control (exact schema/spec adherence where a subtly-wrong output is costly to catch, intricate multi-step reasoning that must stay coherent with prior decisions in-session).
+- The task needs local file access, terminal execution, or git operations (writing to disk, running bench/build/test commands, commits, pushes).
+
+This is a default, not an absolute — judgment calls in either direction are fine, but the starting assumption for any new coding task should be "can this go to DeepSeek or Gemini first?" not "let me just do this directly."
+
 ## Routing Rules
 1. **Repository Audits & Code Reviews -> `/gemini`**
    - Use `/gemini` for large file reviews, monorepo context scanning, or reading massive log files.
@@ -65,7 +73,7 @@ generation tasks to Gemini, DeepSeek, and NVIDIA-hosted Nemotron.
    - Requires `NVIDIA_API_KEY` in the shell environment or `~/.omp/agent/.env` (per machine, not committed).
 
 # graphify
-- **graphify** (`~/.omp/agent/skills/graphify/SKILL.md` or `~/.claude/skills/graphify/SKILL.md`) - any input to knowledge graph. Trigger: `/graphify`
+- **graphify** (`~/.omp/skills/graphify/SKILL.md`) - any input to knowledge graph. Trigger: `/graphify`
 When the user types `/graphify`, use the installed graphify skill or instructions before doing anything else.
 
 # Frappe Bench Troubleshooting
