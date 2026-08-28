@@ -3,6 +3,28 @@ set -e
 
 DOTFILES_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
+# Windows without a login/profile-sourcing shell (e.g. bootstrap.sh invoked
+# directly by a task runner, IDE integration, or `sh bootstrap.sh` from
+# cmd.exe) never gets Git Bash's usual /etc/profile HOME=$USERPROFILE
+# assignment, so $HOME can be empty even though USERPROFILE/HOMEDRIVE are
+# set — every path below (~/.claude, ~/.omp/agent, ...) would then resolve
+# against filesystem root. Linux/macOS always have $HOME set by the OS or
+# login shell, so this fallback never fires there.
+if [ -z "$HOME" ]; then
+    if [ -n "$USERPROFILE" ]; then
+        # C:\Users\NAME -> /c/Users/NAME (POSIX form Git Bash expects)
+        _drive="$(printf '%s' "$USERPROFILE" | cut -c1 | tr 'A-Z' 'a-z')"
+        _rest="$(printf '%s' "$USERPROFILE" | cut -c3- | tr '\\' '/')"
+        export HOME="/$_drive$_rest"
+        unset _drive _rest
+    elif [ -n "$HOMEDRIVE" ] && [ -n "$HOMEPATH" ]; then
+        _drive="$(printf '%s' "$HOMEDRIVE" | cut -c1 | tr 'A-Z' 'a-z')"
+        _rest="$(printf '%s' "$HOMEPATH" | tr '\\' '/')"
+        export HOME="/$_drive$_rest"
+        unset _drive _rest
+    fi
+fi
+
 echo "🚀 Setting up Claude Code + OMP dotfiles..."
 
 # --- symlink helper -----------------------------------------------------
@@ -53,6 +75,8 @@ if ! command -v jq &> /dev/null; then
         sudo apt-get update -y && sudo apt-get install -y jq
     elif command -v brew &> /dev/null; then
         brew install jq
+    elif command -v winget &> /dev/null; then
+        winget install --id jqlang.jq -e --silent --accept-package-agreements --accept-source-agreements
     fi
 fi
 
@@ -108,7 +132,17 @@ if [ -d "$DOTFILES_DIR/claude/scripts" ]; then
     echo "✅ Linked ~/.claude/scripts"
     if [ -f "$DOTFILES_DIR/claude/scripts/package.json" ] && command -v npm &> /dev/null; then
         echo "📦 Installing scripts/ dependencies..."
-        (cd "$DOTFILES_DIR/claude/scripts" && npm install)
+        # Best-effort like the Gemini CLI install above: on Windows, some
+        # npm-installed package's own lifecycle script can shell out to a
+        # bare `bash`/`sh` that resolves (via PATH) to the legacy
+        # C:\Windows\System32\bash.exe WSL1 launcher instead of Git Bash,
+        # failing with "WSL 1 is not supported." That's an optional
+        # convenience install (Claude Code helper scripts), not core setup —
+        # it must not take down the OMP config/Hindsight/git-hooks steps
+        # below via `set -e`.
+        if ! (cd "$DOTFILES_DIR/claude/scripts" && npm install); then
+            echo "⚠️  npm install failed for claude/scripts — its helper scripts may not work until you resolve this and re-run bootstrap.sh."
+        fi
     fi
 fi
 
@@ -139,6 +173,15 @@ fi
 if [ -d "$DOTFILES_DIR/omp/agent/commands" ]; then
     link_path "$DOTFILES_DIR/omp/agent/commands" "$HOME/.omp/agent/commands"
     echo "✅ Linked ~/.omp/agent/commands"
+fi
+
+# 8a2. Symlink hooks/ (whole directory). Currently ships hindsight-sync.ts —
+# a session_shutdown hook that best-effort pushes memory to this repo on
+# every omp exit. See scripts/sync-hindsight-memory.sh for the manual
+# push/pull commands it wraps.
+if [ -d "$DOTFILES_DIR/omp/agent/hooks" ]; then
+    link_path "$DOTFILES_DIR/omp/agent/hooks" "$HOME/.omp/agent/hooks"
+    echo "✅ Linked ~/.omp/agent/hooks"
 fi
 
 # 8b. Symlink FLUX helper scripts (whole directory, so new scripts need no
@@ -202,13 +245,26 @@ fi
 # directories left behind by that kind of self-update.
 if [ -d "$DOTFILES_DIR/omp/agent/scripts" ]; then
     if command -v omp &> /dev/null; then
-        bash "$HOME/.omp/agent/scripts/consolidate-claude-skills.sh" || echo "⚠️  consolidate-claude-skills.sh reported an issue (see above) — check ~/.claude/skills manually."
+        # "$BASH" (this script's own running interpreter), not a bare `bash`
+        # lookup: on Windows, PATH can resolve plain `bash` to the legacy
+        # C:\Windows\System32\bash.exe WSL1 launcher instead of Git Bash,
+        # which fails outright with "WSL 1 is not supported."
+        "$BASH" "$HOME/.omp/agent/scripts/consolidate-claude-skills.sh" || echo "⚠️  consolidate-claude-skills.sh reported an issue (see above) — check ~/.claude/skills manually."
     else
         echo "ℹ️  Skipping ~/.claude/skills consolidation: omp not found on this machine (Claude Code needs ~/.claude/skills to stay populated here)."
     fi
 fi
 
-# 8g. Start the Hindsight memory server (OMP memory.backend: hindsight —
+# 8g. Scaffold ~/.omp/agent/.env from the committed template on first run
+# only — never overwrite an existing one, since that's where this machine's
+# real, uncommitted API keys live (see omp/agent/.env.example and step 10
+# below).
+if [ ! -f "$HOME/.omp/agent/.env" ] && [ -f "$DOTFILES_DIR/omp/agent/.env.example" ]; then
+    cp "$DOTFILES_DIR/omp/agent/.env.example" "$HOME/.omp/agent/.env"
+    echo "✅ Created ~/.omp/agent/.env — put your API keys there."
+fi
+
+# 8h. Start the Hindsight memory server (OMP memory.backend: hindsight —
 # see omp/agent/config.yml and AGENTS.md's "Memory (Hindsight)" section).
 # Idempotent: does nothing if a `hindsight` container already exists
 # (start/restart a stopped one yourself; this never recreates or updates
@@ -219,18 +275,37 @@ fi
 # permission setup needed.
 if command -v docker &> /dev/null; then
     if [ -z "$(docker ps -aq -f name='^/hindsight$' 2>/dev/null)" ]; then
-        if [ -n "$GEMINI_API_KEY" ]; then
+        # Match check_api_key's precedence below (step 10): a key placed
+        # only in ~/.omp/agent/.env — the designated per-machine secrets
+        # file — must be enough to start Hindsight, not just the shell env.
+        HINDSIGHT_GEMINI_KEY="$GEMINI_API_KEY"
+        if [ -z "$HINDSIGHT_GEMINI_KEY" ] && [ -f "$HOME/.omp/agent/.env" ]; then
+            HINDSIGHT_GEMINI_KEY="$(grep -E '^GEMINI_API_KEY=' "$HOME/.omp/agent/.env" | tail -1 | cut -d= -f2- | sed -E 's/^"(.*)"$/\1/')"
+        fi
+        if [ -n "$HINDSIGHT_GEMINI_KEY" ]; then
             echo "🧠 Starting Hindsight memory server..."
-            docker run -d --pull always --name hindsight --restart unless-stopped \
+            if docker run -d --pull always --name hindsight --restart unless-stopped \
                 -p 8888:8888 -p 9999:9999 \
                 -e HINDSIGHT_API_LLM_PROVIDER=gemini \
-                -e HINDSIGHT_API_LLM_API_KEY="$GEMINI_API_KEY" \
+                -e HINDSIGHT_API_LLM_API_KEY="$HINDSIGHT_GEMINI_KEY" \
                 -e HINDSIGHT_API_LLM_MODEL=gemini-3-flash-preview \
                 -e HINDSIGHT_API_WORKER_ID=hindsight-omp \
                 -v hindsight-data:/home/hindsight/.pg0 \
-                ghcr.io/vectorize-io/hindsight:latest > /dev/null \
-                && echo "✅ Started Hindsight (API http://localhost:8888, UI http://localhost:9999)" \
-                || echo "⚠️  Failed to start Hindsight — check 'docker logs hindsight'."
+                ghcr.io/vectorize-io/hindsight:latest > /dev/null; then
+                echo "✅ Started Hindsight (API http://localhost:8888, UI http://localhost:9999)"
+                # Fresh, empty container — safe to seed from the last pushed
+                # snapshot, if any (scripts/sync-hindsight-memory.sh). This
+                # never runs against an already-populated container (that's
+                # the "already exists" branch below), so it can't clobber
+                # local-only data.
+                if [ -f "$DOTFILES_DIR/omp/agent/scripts/sync-hindsight-memory.sh" ]; then
+                    echo "🧠 Restoring shared memory snapshot from dotfiles (if any)..."
+                    bash "$DOTFILES_DIR/omp/agent/scripts/sync-hindsight-memory.sh" pull \
+                        || echo "⚠️  Memory snapshot restore failed — container is still usable, just empty. Run 'sync-hindsight-memory.sh pull' manually to retry."
+                fi
+            else
+                echo "⚠️  Failed to start Hindsight — check 'docker logs hindsight'."
+            fi
         else
             echo "ℹ️  Skipping Hindsight memory server: GEMINI_API_KEY not set in this shell or ~/.omp/agent/.env."
         fi
@@ -258,6 +333,21 @@ for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
         sed -i.bak -e '/^# OMP shared config (dotfiles)$/d' -e '/^export PI_CONFIG_FILES=/d' "$rc" && rm -f "$rc.bak"
         printf '\n# OMP shared config (dotfiles)\n%s\n' "$OMP_CONFIG_LINE" >> "$rc"
         echo "✅ Set PI_CONFIG_FILES in $rc"
+    fi
+done
+
+# 9b. mem-push / mem-pull aliases for scripts/sync-hindsight-memory.sh —
+# manual trigger alongside the automatic session_shutdown hook (step 8a2),
+# so a push you want to see succeed/fail live (e.g. before switching
+# machines mid-day) doesn't depend on the silent background hook. Same
+# self-healing rewrite as the PI_CONFIG_FILES block above.
+MEM_PUSH_LINE="alias mem-push='bash \"$DOTFILES_DIR/omp/agent/scripts/sync-hindsight-memory.sh\" push'"
+MEM_PULL_LINE="alias mem-pull='bash \"$DOTFILES_DIR/omp/agent/scripts/sync-hindsight-memory.sh\" pull'"
+for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
+    if [ -f "$rc" ] && { ! grep -qF "$MEM_PUSH_LINE" "$rc" || ! grep -qF "$MEM_PULL_LINE" "$rc"; }; then
+        sed -i.bak -e '/^# Hindsight memory sync aliases (dotfiles)$/d' -e "/^alias mem-push=/d" -e "/^alias mem-pull=/d" "$rc" && rm -f "$rc.bak"
+        printf '\n# Hindsight memory sync aliases (dotfiles)\n%s\n%s\n' "$MEM_PUSH_LINE" "$MEM_PULL_LINE" >> "$rc"
+        echo "✅ Set mem-push/mem-pull aliases in $rc"
     fi
 done
 if command -v setx &> /dev/null; then

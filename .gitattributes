@@ -3,3 +3,8 @@
 # LF -> CRLF and corrupt bootstrap.sh (bash chokes on \r in the shebang and
 # every subsequent line): "$'\r': command not found", syntax errors on `{`.
 * text=auto eol=lf
+
+# text=auto's binary auto-detection would normally already catch this, but
+# make it explicit: never run eol conversion or text diffing on the
+# Hindsight memory snapshot (git's heuristic only samples the file).
+omp/hindsight-backup.zip -text -diff

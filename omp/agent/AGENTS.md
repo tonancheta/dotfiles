@@ -86,6 +86,24 @@ background system, not a manual workflow:
   backend health; container logs via `docker logs hindsight` for the server itself.
 - Bank scoping is per-project-tagged by default (see `omp://memory.md`), so this
   project's memories don't bleed into an unrelated repo's recall.
+- The Hindsight database itself is per-machine (a local `hindsight-data` Docker
+  volume) — it does NOT sync across machines on its own. Cross-machine sync goes
+  through this dotfiles repo, via `omp/agent/scripts/sync-hindsight-memory.sh`:
+  - `push`: `hindsight-admin backup` the running container -> `omp/hindsight-backup.zip`
+    -> commit -> `git push`.
+  - `pull`: `git pull` -> `hindsight-admin restore --yes` into the running container.
+    bootstrap.sh runs this automatically, but ONLY right after starting a brand-new
+    empty container (step 8h) — it never touches an already-populated one, so a
+    normal bootstrap.sh re-run can't clobber local data.
+  - `omp/agent/hooks/post/hindsight-sync.ts` best-effort auto-pushes in the
+    background on every omp `session_shutdown` (failures are silent — logged to
+    `~/.omp/agent/scripts/hindsight-sync.log`, not surfaced). `mem-push`/`mem-pull`
+    shell aliases (step 9b) run the same script manually when you want to see
+    success/failure live, e.g. before switching machines mid-day.
+  - **This is a full snapshot overwrite, not a merge.** Working on machine A, then
+    working on machine B without pulling A's snapshot first, then pushing from B,
+    silently discards A's un-pushed memories — git has no visibility into the zip's
+    contents to warn you. Pull before you start on any machine; push when you're done.
 
 (Previously graphify's per-repo knowledge-graph skill filled this role. Removed:
 redundant with Hindsight, and its skill discovery was independently found to be
