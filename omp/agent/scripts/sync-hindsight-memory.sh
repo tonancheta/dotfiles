@@ -18,7 +18,11 @@
 # and this dotfiles checkout to already have a configured git remote/auth.
 set -euo pipefail
 
-DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+# Resolve through the ~/.omp/agent/scripts symlink (bootstrap.sh step 8b) to
+# this script's real location in the dotfiles checkout — BASH_SOURCE alone
+# reflects the invocation path, and going ../../.. from a symlinked
+# ~/.omp/agent/scripts lands under $HOME instead of the dotfiles root.
+DOTFILES_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../../.." && pwd)"
 BACKUP_REL="omp/hindsight-backup.zip"
 BACKUP_PATH="$DOTFILES_DIR/$BACKUP_REL"
 CONTAINER_TMP="/tmp/hindsight-backup.zip"
@@ -84,6 +88,11 @@ do_pull() {
   docker cp "$BACKUP_PATH" "hindsight:$CONTAINER_TMP"
   docker exec hindsight hindsight-admin restore "$CONTAINER_TMP" --yes
   docker exec hindsight rm -f "$CONTAINER_TMP"
+  # A logical restore populates banks outside their normal create-time path,
+  # so their per-(bank, fact_type) vector index coverage is missing until
+  # rebuilt — otherwise recall silently falls back to a slower global-index
+  # scan. CONCURRENTLY-built, so this never blocks the container's traffic.
+  docker exec hindsight hindsight-admin repair-bank --all
   echo "hindsight-sync: restored $BACKUP_REL into the running container"
 }
 
