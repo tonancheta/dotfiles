@@ -17,3 +17,5 @@
 #
 # No custom providers/models currently registered. Add entries under
 # `providers:` only for models the bundled catalog doesn't ship.
+
+providers: {}
