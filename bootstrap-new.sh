@@ -8,6 +8,14 @@ DOTFILES_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 # user to re-run whichever one they actually have.
 SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
 
+# Variant of bootstrap.sh: identical in every step except 8h below, where
+# it starts the Hindsight memory server WITHOUT restoring the shared memory
+# snapshot from this dotfiles repo — Hindsight comes up on but empty rather
+# than seeded with whatever another machine last pushed. Everything else
+# (Claude Code + OMP setup, git hooks, rc file wiring) is the same. Diff
+# against bootstrap.sh with `diff bootstrap.sh bootstrap-new.sh` to confirm
+# 8h is the only substantive change before editing either file.
+#
 # Windows without a login/profile-sourcing shell (e.g. bootstrap.sh invoked
 # directly by a task runner, IDE integration, or `sh bootstrap.sh` from
 # cmd.exe) never gets Git Bash's usual /etc/profile HOME=$USERPROFILE
@@ -278,6 +286,13 @@ fi
 # /gemini (AGENTS.md routing rule 1). Named Docker volume (not a host bind
 # mount) so the embedded Postgres (pg0) just works — no UID 1000
 # permission setup needed.
+#
+# bootstrap-new.sh variant: unlike bootstrap.sh's step 8h, this deliberately
+# skips restoring the shared memory snapshot (scripts/sync-hindsight-
+# memory.sh pull) after starting a fresh container, so Hindsight comes up
+# ON but EMPTY instead of seeded with whatever was last pushed to the
+# dotfiles repo. Use this script instead of bootstrap.sh when you want a
+# clean memory bank on this machine rather than the shared one.
 if command -v docker &> /dev/null; then
     if [ -z "$(docker ps -aq -f name='^/hindsight$' 2>/dev/null)" ]; then
         # Match check_api_key's precedence below (step 10): a key placed
@@ -298,16 +313,7 @@ if command -v docker &> /dev/null; then
                 -v hindsight-data:/home/hindsight/.pg0 \
                 ghcr.io/vectorize-io/hindsight:latest > /dev/null; then
                 echo "✅ Started Hindsight (API http://localhost:8888, UI http://localhost:9999)"
-                # Fresh, empty container — safe to seed from the last pushed
-                # snapshot, if any (scripts/sync-hindsight-memory.sh). This
-                # never runs against an already-populated container (that's
-                # the "already exists" branch below), so it can't clobber
-                # local-only data.
-                if [ -f "$DOTFILES_DIR/omp/agent/scripts/sync-hindsight-memory.sh" ]; then
-                    echo "🧠 Restoring shared memory snapshot from dotfiles (if any)..."
-                    bash "$DOTFILES_DIR/omp/agent/scripts/sync-hindsight-memory.sh" pull \
-                        || echo "⚠️  Memory snapshot restore failed — container is still usable, just empty. Run 'sync-hindsight-memory.sh pull' manually to retry."
-                fi
+                echo "ℹ️  Skipping shared memory snapshot restore — starting with an empty memory bank (this is bootstrap-new.sh; run bootstrap.sh instead to inherit the shared snapshot, or 'sync-hindsight-memory.sh pull' manually later if you change your mind)."
             else
                 echo "⚠️  Failed to start Hindsight — check 'docker logs hindsight'."
             fi

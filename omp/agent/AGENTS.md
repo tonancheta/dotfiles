@@ -94,7 +94,11 @@ background system, not a manual workflow:
   - `pull`: `git pull` -> `hindsight-admin restore --yes` into the running container.
     bootstrap.sh runs this automatically, but ONLY right after starting a brand-new
     empty container (step 8h) — it never touches an already-populated one, so a
-    normal bootstrap.sh re-run can't clobber local data.
+    normal bootstrap.sh re-run can't clobber local data. `bootstrap-new.sh` (repo
+    root) is a variant that starts Hindsight the same way but deliberately skips
+    this pull, so a fresh container comes up empty instead of seeded from the
+    last-pushed snapshot — use it when you want this machine's memory bank to
+    start clean rather than inherit the shared one.
   - `omp/agent/hooks/post/hindsight-sync.ts` best-effort auto-pushes in the
     background on every omp `session_shutdown` (failures are silent — logged to
     `~/.omp/agent/scripts/hindsight-sync.log`, not surfaced). `mem-push`/`mem-pull`
@@ -104,6 +108,14 @@ background system, not a manual workflow:
     working on machine B without pulling A's snapshot first, then pushing from B,
     silently discards A's un-pushed memories — git has no visibility into the zip's
     contents to warn you. Pull before you start on any machine; push when you're done.
+  - **Which variant runs on future logins is switchable, not fixed.** Both
+    scripts' step 9c/9d write `~/.omp/agent/.bootstrap-variant` with their own
+    path and register `bootstrap-autorun.sh` (repo root) in `~/.bashrc`/
+    `~/.zshrc`. On each new interactive shell, `bootstrap-autorun.sh` re-runs
+    whichever script that state file names, at most once per calendar day, in
+    the background (log: `~/.omp/agent/bootstrap-autorun.log`). So running
+    `bootstrap-new.sh` once makes it the one that keeps running on subsequent
+    logins; running plain `bootstrap.sh` again switches it back.
 
 (Previously graphify's per-repo knowledge-graph skill filled this role. Removed:
 redundant with Hindsight, and its skill discovery was independently found to be
