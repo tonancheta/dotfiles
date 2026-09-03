@@ -59,4 +59,8 @@ including the automatic `session_shutdown` push hook and the `mem-push` /
 ## Task routing (Claude Code / OMP)
 See `omp/agent/AGENTS.md` for the full token-preservation routing policy
 (`/gemini`, `/deepseek`, `/deepseek-r`, `/nemotron`, `/diagram`, `/flux`) and
-other project conventions.
+other project conventions. The policy is mechanically enforced, not just
+documented: `omp/agent/hooks/pre/routing-guard.ts` blocks direct test-file
+writes, `task` dispatches with no `agent` set, and prod-deploy commands run
+without a prior `/nemotron` pass this session — see AGENTS.md's
+"Enforcement" section for the `[routing:<reason>]` bypass tag.

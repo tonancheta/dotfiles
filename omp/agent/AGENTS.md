@@ -10,7 +10,44 @@ Coding work is distributed to an integrated AI (currently DeepSeek or Gemini) **
 - The task needs fine-grained precision control (exact schema/spec adherence where a subtly-wrong output is costly to catch, intricate multi-step reasoning that must stay coherent with prior decisions in-session).
 - The task needs local file access, terminal execution, or git operations (writing to disk, running bench/build/test commands, commits, pushes).
 
-This is a default, not an absolute — judgment calls in either direction are fine, but the starting assumption for any new coding task should be "can this go to DeepSeek or Gemini first?" not "let me just do this directly."
+This is the enforced default, not free judgment. A long session has no natural checkpoint
+where "should this specific file have been delegated?" gets re-asked, so silent drift back
+to "just do it myself" is the expected failure mode, not a hypothetical one -- it happened
+across a full feature build before this section existed. Deviating from the default MUST be
+a stated decision, not a silent one: name which exception applies, in the open, before
+acting -- either by narrating it, or, for the categories below that are mechanically
+checked, by tagging the tool call's intent with `[routing:<reason>]`.
+
+## Enforcement
+`omp/agent/hooks/pre/routing-guard.ts` (a `tool_call` pre-hook, loaded on every session from
+`~/.omp/agent/hooks/pre/`) mechanically blocks the three violations that actually occurred
+and are cheaply detectable from tool-call shape alone:
+1. **Writing or editing a test file directly** (path matches a `tests?/`, `__tests__/`, or
+   `spec/` directory, or a `.test.`/`.spec.`/`Test.<ext>`/`_test.<ext>`/`_spec.<ext>` filename)
+   instead of dispatching it to `/deepseek` (rule 2).
+2. **A `task` dispatch that omits `agent`** and silently rides the spawn-policy default,
+   instead of explicitly choosing a model per the Default Rule.
+3. **A production/shared-environment deploy command** (`docker compose -f *prod*.yml ... up`,
+   `kubectl apply`/`rollout`, `git push origin main`/`master`) run before a `/nemotron`
+   second opinion this session (rule 5).
+Each block names the rule and tells you exactly how to comply or to bypass with a stated
+reason. **Add `[routing:<reason>]` to the tool call's `i` (intent) argument to bypass** --
+this is the audited exception path the Default Rule requires; it is intentionally cheap (no
+extra tool call) so it never blocks legitimate work, it only forces the decision onto the
+record instead of leaving it as an unstated judgment call.
+This hook does not, and cannot, judge whether ordinary new-feature coding work or
+documentation should have gone to `/deepseek` or `/gemini` -- that needs judging task
+*content*, not just a file path or a missing field. That part of the policy is enforced by
+the next paragraph and by your own judgment at plan time, not by pattern-matching.
+
+## Todo-Tagging Requirement
+When planning a multi-step dev task with the `todo` tool, tag each planned artifact with its
+intended route at `init` time, before creating anything -- e.g. `"Write Mission/Content
+PHPUnit tests [deepseek]"`, `"Audit auth.ts for race conditions [gemini]"`, `"Build Mission
+CRUD modal [deepseek, exception: needs exact API-contract coherence with migrations written
+this session]"`. A todo item with no routing tag for coding/test/doc/audit work is an
+incomplete plan, not a native-by-default one -- decide the route when you scope the work,
+not retroactively when someone asks whether you followed the rule.
 
 ## Routing Rules
 1. **Repository Audits & Code Reviews -> `/gemini`**
@@ -26,6 +63,8 @@ This is a default, not an absolute — judgment calls in either direction are fi
      `modelRoles.deepseek` in `config.yml`, `deepseek-v4-flash`).
    - Example: `/deepseek "Write Jest unit tests for services/auth.ts."`
    - Requires `DEEPSEEK_API_KEY` in the shell environment or `~/.omp/agent/.env` (per machine, not committed).
+   - **Enforced for tests**: `write`/`edit` calls targeting a test-shaped path are blocked by
+     `routing-guard.ts` unless dispatched this way or tagged `[routing:<reason>]` — see Enforcement above.
 
 3. **Complex Logic & Debugging -> `/deepseek-r`**
    - Use `/deepseek-r` for heavy algorithmic reasoning or complex bug investigations.
@@ -49,6 +88,9 @@ This is a default, not an absolute — judgment calls in either direction are fi
      `modelRoles.nemotron` in `config.yml`).
    - Example: `/nemotron "Check this auth diff for race conditions and edge cases."`
    - Requires `NVIDIA_API_KEY` in the shell environment or `~/.omp/agent/.env` (per machine, not committed).
+   - **Enforced before deploy**: `routing-guard.ts` blocks prod-compose/`kubectl`/`git push
+     origin main`-shaped commands until a `/nemotron` dispatch has run this session, or the
+     command is tagged `[routing:<reason>]` — see Enforcement above.
 
 6. **Technical Diagrams -> `/diagram`**
    - Use `/diagram` to turn architecture, flows, sequences, ER models, or state
