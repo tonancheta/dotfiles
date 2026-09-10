@@ -79,7 +79,7 @@ not retroactively when someone asks whether you followed the rule.
 
 5. **Second-Opinion Review -> `/nemotron`**
    - Use `/nemotron` to cross-check a diff, design decision, or debugging conclusion via
-     NVIDIA-hosted `nvidia/llama-3.3-nemotron-super-49b-v1.5` before finalizing. It is
+     NVIDIA-hosted `nvidia/nemotron-3-super-120b-a12b` before finalizing. It is
      independently trained from Gemini/DeepSeek, so it catches blind spots a same-lineage
      reviewer (rules 1-3) would share.
    - Do not route primary audits, test generation, or first-pass debugging here — it is a

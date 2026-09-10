@@ -4,7 +4,7 @@
 # — merge any new shared keys here by hand instead of symlinking this file
 # wholesale over an existing config.yml.
 modelRoles:
-  nemotron: nvidia/llama-3.3-nemotron-super-49b-v1.5:high
+  nemotron: nvidia/nemotron-3-super-120b-a12b:high
   gemini: google/gemini-3.1-pro-preview:high
   deepseek: deepseek/deepseek-v4-flash:low
   deepseek-r: deepseek/deepseek-v4-pro:max
