@@ -405,43 +405,35 @@ check_api_key GEMINI_API_KEY "" "/gemini"
 check_api_key DEEPSEEK_API_KEY "sk-" "/deepseek and /deepseek-r"
 
 # 10a. Verify the Anthropic OAuth account priority documented in AGENTS.md's
-# "Anthropic Account Priority" section. OMP has no config setting to pin which
-# logged-in Anthropic account `anthropic/*` OAuth rotation prefers (checked against
-# the full `omp config list --json` schema and providers.md's credential-precedence
-# docs) -- the account registered first (lowest `id` in agent.db's auth_credentials
-# table) is the one used for normal requests, with any sibling account used only as
-# a fallback on HTTP 402 (quota-exhausted) errors. This check is read-only and
-# best-effort: it never edits agent.db (hand-editing the live auth store risks
-# corrupting credentials), it only warns if login order needs fixing. Skipped when
-# agent.db doesn't exist yet (first-ever omp login) or python3 is unavailable.
+# "Anthropic Account Priority" section. CORRECTED 2026-09-10: an earlier version
+# of this check assumed the first-registered (lowest-`id`) agent.db credential
+# was the one OMP actually uses for chat requests -- `omp dry-balance` disproved
+# that (100/200 random session ids resolved to the OTHER account regardless of
+# `id` order). OMP exposes no documented account-priority setting and the real
+# selection logic is closed-source, so this check uses `omp dry-balance` itself
+# as ground truth (it resolves credentials for many random session ids without
+# sending real chat requests -- safe and cheap) instead of guessing from
+# agent.db. Best-effort and read-only: never modifies agent.db or config.
 ANTHROPIC_PRIORITY_EMAIL="ton@servio.ph"
-if [ -f "$HOME/.omp/agent/agent.db" ] && command -v python3 &> /dev/null; then
-    PRIMARY_ANTHROPIC_IDENTITY="$(python3 - <<'PYEOF'
-import sqlite3, os
-db = os.path.expanduser("~/.omp/agent/agent.db")
+if [ -f "$HOME/.omp/agent/agent.db" ] && command -v omp &> /dev/null && command -v python3 &> /dev/null; then
+        WINNING_ANTHROPIC_ACCOUNT="$(omp dry-balance anthropic/claude-sonnet-5 --count 20 --json 2>/dev/null | python3 -c '
+import json, sys
 try:
-    con = sqlite3.connect(db, timeout=5)
-    cur = con.cursor()
-    cur.execute(
-        "SELECT identity_key FROM auth_credentials WHERE provider='anthropic' "
-        "ORDER BY id ASC LIMIT 1"
-    )
-    row = cur.fetchone()
-    con.close()
-    print(row[0] if row and row[0] else "")
+    data = json.load(sys.stdin)
+    accounts = data.get("success", {}).get("accounts", [])
+    print(max(accounts, key=lambda a: a.get("count", 0)).get("account", "") if accounts else "")
 except Exception:
     print("")
-PYEOF
-)"
-    if [ -n "$PRIMARY_ANTHROPIC_IDENTITY" ]; then
-        if [[ "$PRIMARY_ANTHROPIC_IDENTITY" == *"email:${ANTHROPIC_PRIORITY_EMAIL}|"* ]]; then
-            echo "✅ Anthropic OAuth priority: ${ANTHROPIC_PRIORITY_EMAIL} is primary (registered first)."
-        else
-            echo "⚠️  Anthropic OAuth priority: the first-registered account is NOT ${ANTHROPIC_PRIORITY_EMAIL}."
-            echo "    OMP has no account-priority setting -- the first-registered account is used for"
-            echo "    normal requests. Fix: /logout anthropic (removes all), then /login anthropic as"
-            echo "    ${ANTHROPIC_PRIORITY_EMAIL} FIRST, then re-add any other account."
-        fi
+')"
+        if [ -n "$WINNING_ANTHROPIC_ACCOUNT" ]; then
+            if [[ "$WINNING_ANTHROPIC_ACCOUNT" == "${ANTHROPIC_PRIORITY_EMAIL}"* ]]; then
+                echo "✅ Anthropic OAuth: ${ANTHROPIC_PRIORITY_EMAIL} wins account selection (verified via omp dry-balance)."
+            else
+                echo "⚠️  Anthropic OAuth: account selection favors ${WINNING_ANTHROPIC_ACCOUNT}, not ${ANTHROPIC_PRIORITY_EMAIL}."
+                echo "    OMP has no account-priority setting and its selection logic is undocumented/closed-source."
+                echo "    The only verified guaranteed fix: '/logout anthropic' then keep ONLY ${ANTHROPIC_PRIORITY_EMAIL}"
+                echo "    logged in. See AGENTS.md's 'Anthropic Account Priority' section for details."
+            fi
     fi
 fi
 

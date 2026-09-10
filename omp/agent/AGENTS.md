@@ -115,8 +115,8 @@ not retroactively when someone asks whether you followed the rule.
    - Requires `NVIDIA_API_KEY` in the shell environment or `~/.omp/agent/.env` (per machine, not committed).
 
 # Anthropic Account Priority
-Two Anthropic OAuth accounts are logged in for development sessions: `ton@servio.ph`
-(primary) and `antonio.ancheta@santenewzealand.com` (secondary/fallback). OMP exposes
+`ton@servio.ph` is intended to be the primary account for development sessions;
+`antonio.ancheta@santenewzealand.com` (SanteDev) is secondary/fallback. OMP exposes
 no `modelRoles`/`config.yml` setting to pin which OAuth account `anthropic/*` models
 use — confirmed against the full `omp config list --json` schema (no account-priority
 key exists among its ~489 settings) and `providers.md`'s credential-precedence docs
@@ -125,23 +125,34 @@ Per that precedence order, a stored OAuth credential always outranks
 `ANTHROPIC_API_KEY`/`ANTHROPIC_OAUTH_TOKEN`, so an env var cannot force one account
 over another either.
 
-What actually determines priority: `~/.omp/agent/agent.db`'s `auth_credentials` table
-has no rank/priority column, only `id`/`created_at`/`updated_at`. The account
-registered first (lowest `id`) is the one OMP's OAuth rotation treats as primary for
-normal use, falling back to the sibling account only on HTTP 402 (quota-exhausted)
-errors. `ton@servio.ph` is `id=2` (registered 2026-08-15, before
-`antonio.ancheta@santenewzealand.com`'s `id=3` added 2026-09-03), so it is already
-primary on this machine.
+**What does NOT determine selection (disproven 2026-09-10):** an earlier version of
+this section claimed the first-registered (lowest-`id`) credential in
+`~/.omp/agent/agent.db`'s `auth_credentials` table was primary. `omp dry-balance
+anthropic/claude-sonnet-5 --count 200 --json` disproves this: 200/200 random session
+ids resolved to `antonio.ancheta@santenewzealand.com`, 0 to `ton@servio.ph` — despite
+`ton@servio.ph` being `id=2` (registered 2026-08-15) vs. the other's `id=3`
+(2026-09-03). `id` order is not the mechanism. `omp usage` corroborates this: as of
+2026-09-10, `ton@servio.ph` shows 0% used on both the 5h and 7-day windows (zero
+traffic in a week) while the Sante account shows real consumption.
 
-Because priority is registration order, not a config value, it must be preserved by
-login discipline rather than a setting:
-- On any new machine, run `/login anthropic` for `ton@servio.ph` **before** logging in
-  any other Anthropic account.
-- Never `/logout anthropic` and re-add accounts in a different order without
-  re-checking which one landed at the lowest `id`.
-- `bootstrap.sh` step 10a verifies this automatically on every run (read-only —
-  it never edits `agent.db`) and warns if the lowest-`id` Anthropic credential is not
-  `ton@servio.ph`.
+The actual selection logic is closed-source (compiled binary, no accessible
+package source) and unverified. The only differentiating signal found in the
+credential store is `authorizedAt` (last full OAuth login, not token refresh) inside
+each row's `data` JSON: the Sante account's is ~22 minutes more recent than
+servio.ph's (both from 2026-09-01), which is *consistent with* a "most-recently-
+authorized wins" theory but is not confirmed — do not treat it as fact without
+re-testing (re-`/login anthropic` as `ton@servio.ph`, then re-run `dry-balance` to
+see if selection flips).
+
+Because there is no config-level lever, the only **verified, guaranteed** fix when
+the wrong account wins is exclusivity, not priority: `/logout anthropic` and keep
+only `ton@servio.ph` logged in. Restarting OMP does NOT help on its own —
+`dry-balance` already simulates fresh random session ids and still resolved 100% to
+the wrong account, so a new session is not guaranteed a different outcome.
+
+`bootstrap.sh` step 10a checks this on every run using `omp dry-balance` itself as
+ground truth (read-only, never edits `agent.db` or config) and warns if the winning
+account is not `ton@servio.ph`.
 
 # Memory (Hindsight)
 Autonomous memory is on (`memory.backend: hindsight` in `config.yml`) backed by a local
