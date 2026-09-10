@@ -114,6 +114,35 @@ not retroactively when someone asks whether you followed the rule.
    - Example: `/flux "isometric 3D icon of a database, soft studio lighting" --width 1024 --height 1024`
    - Requires `NVIDIA_API_KEY` in the shell environment or `~/.omp/agent/.env` (per machine, not committed).
 
+# Anthropic Account Priority
+Two Anthropic OAuth accounts are logged in for development sessions: `ton@servio.ph`
+(primary) and `antonio.ancheta@santenewzealand.com` (secondary/fallback). OMP exposes
+no `modelRoles`/`config.yml` setting to pin which OAuth account `anthropic/*` models
+use — confirmed against the full `omp config list --json` schema (no account-priority
+key exists among its ~489 settings) and `providers.md`'s credential-precedence docs
+("multiple accounts are ranked and rotated automatically", no user-facing override).
+Per that precedence order, a stored OAuth credential always outranks
+`ANTHROPIC_API_KEY`/`ANTHROPIC_OAUTH_TOKEN`, so an env var cannot force one account
+over another either.
+
+What actually determines priority: `~/.omp/agent/agent.db`'s `auth_credentials` table
+has no rank/priority column, only `id`/`created_at`/`updated_at`. The account
+registered first (lowest `id`) is the one OMP's OAuth rotation treats as primary for
+normal use, falling back to the sibling account only on HTTP 402 (quota-exhausted)
+errors. `ton@servio.ph` is `id=2` (registered 2026-08-15, before
+`antonio.ancheta@santenewzealand.com`'s `id=3` added 2026-09-03), so it is already
+primary on this machine.
+
+Because priority is registration order, not a config value, it must be preserved by
+login discipline rather than a setting:
+- On any new machine, run `/login anthropic` for `ton@servio.ph` **before** logging in
+  any other Anthropic account.
+- Never `/logout anthropic` and re-add accounts in a different order without
+  re-checking which one landed at the lowest `id`.
+- `bootstrap.sh` step 10a verifies this automatically on every run (read-only —
+  it never edits `agent.db`) and warns if the lowest-`id` Anthropic credential is not
+  `ton@servio.ph`.
+
 # Memory (Hindsight)
 Autonomous memory is on (`memory.backend: hindsight` in `config.yml`) backed by a local
 `hindsight` Docker container that bootstrap.sh starts and keeps restarted

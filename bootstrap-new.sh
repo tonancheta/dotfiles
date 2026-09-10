@@ -410,6 +410,47 @@ check_api_key NVIDIA_API_KEY "nvapi-" "/nemotron, /diagram, and /flux"
 check_api_key GEMINI_API_KEY "" "/gemini"
 check_api_key DEEPSEEK_API_KEY "sk-" "/deepseek and /deepseek-r"
 
+# 10a. Verify the Anthropic OAuth account priority documented in AGENTS.md's
+# "Anthropic Account Priority" section. OMP has no config setting to pin which
+# logged-in Anthropic account `anthropic/*` OAuth rotation prefers (checked against
+# the full `omp config list --json` schema and providers.md's credential-precedence
+# docs) -- the account registered first (lowest `id` in agent.db's auth_credentials
+# table) is the one used for normal requests, with any sibling account used only as
+# a fallback on HTTP 402 (quota-exhausted) errors. This check is read-only and
+# best-effort: it never edits agent.db (hand-editing the live auth store risks
+# corrupting credentials), it only warns if login order needs fixing. Skipped when
+# agent.db doesn't exist yet (first-ever omp login) or python3 is unavailable.
+ANTHROPIC_PRIORITY_EMAIL="ton@servio.ph"
+if [ -f "$HOME/.omp/agent/agent.db" ] && command -v python3 &> /dev/null; then
+    PRIMARY_ANTHROPIC_IDENTITY="$(python3 - <<'PYEOF'
+import sqlite3, os
+db = os.path.expanduser("~/.omp/agent/agent.db")
+try:
+    con = sqlite3.connect(db, timeout=5)
+    cur = con.cursor()
+    cur.execute(
+        "SELECT identity_key FROM auth_credentials WHERE provider='anthropic' "
+        "ORDER BY id ASC LIMIT 1"
+    )
+    row = cur.fetchone()
+    con.close()
+    print(row[0] if row and row[0] else "")
+except Exception:
+    print("")
+PYEOF
+)"
+    if [ -n "$PRIMARY_ANTHROPIC_IDENTITY" ]; then
+        if [[ "$PRIMARY_ANTHROPIC_IDENTITY" == *"email:${ANTHROPIC_PRIORITY_EMAIL}|"* ]]; then
+            echo "✅ Anthropic OAuth priority: ${ANTHROPIC_PRIORITY_EMAIL} is primary (registered first)."
+        else
+            echo "⚠️  Anthropic OAuth priority: the first-registered account is NOT ${ANTHROPIC_PRIORITY_EMAIL}."
+            echo "    OMP has no account-priority setting -- the first-registered account is used for"
+            echo "    normal requests. Fix: /logout anthropic (removes all), then /login anthropic as"
+            echo "    ${ANTHROPIC_PRIORITY_EMAIL} FIRST, then re-add any other account."
+        fi
+    fi
+fi
+
 echo "🎉 OMP environment successfully configured!"
 
 # --- Git hooks (all repos) --------------------------------------------------
