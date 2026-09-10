@@ -136,13 +136,19 @@ ids resolved to `antonio.ancheta@santenewzealand.com`, 0 to `ton@servio.ph` — 
 traffic in a week) while the Sante account shows real consumption.
 
 The actual selection logic is closed-source (compiled binary, no accessible
-package source) and unverified. The only differentiating signal found in the
-credential store is `authorizedAt` (last full OAuth login, not token refresh) inside
-each row's `data` JSON: the Sante account's is ~22 minutes more recent than
-servio.ph's (both from 2026-09-01), which is *consistent with* a "most-recently-
-authorized wins" theory but is not confirmed — do not treat it as fact without
-re-testing (re-`/login anthropic` as `ton@servio.ph`, then re-run `dry-balance` to
-see if selection flips).
+package source) and remains genuinely unverified after two disproved theories.
+**Second disproof (2026-09-10, same day):** re-authenticating the Sante account
+(a fresh `/login anthropic` as Sante) left its `authorizedAt` unchanged, yet a
+subsequent `dry-balance` run flipped to 200/200 `ton@servio.ph` — so
+"most-recently-authorized wins" is also false. The earlier "servio.ph shows 0%
+used all week" reading was likely an artifact of `omp usage`'s 7-day window
+resetting right around when it was first checked: a follow-up check minutes later
+showed real, split traffic on both accounts (servio 13%/2%, Sante 19%/0% on the
+5h/7d windows). Selection may be more dynamic/quota-aware than a sticky pin, or
+depend on an internal rotation cursor not visible from `agent.db` or `omp usage`.
+Do not add a third unverified theory here — if you need to know which account is
+active, ask `omp dry-balance <model> --count 200 --json` directly; it is the only
+reliable, repeatable ground truth found so far, and it can change between runs.
 
 Because there is no config-level lever, the only **verified, guaranteed** fix when
 the wrong account wins is exclusivity, not priority: `/logout anthropic` and keep
