@@ -11,6 +11,16 @@
 # which the bundled catalog already ships with reasoning: true, so no custom
 # registration is needed here anymore.
 #
+# 2026-09-12: added a custom `qwen` provider (Alibaba DashScope's OpenAI-
+# compatible endpoint) to back /qwen (repo audits/code review, formerly
+# /gemini) and, via bootstrap.sh step 8h, the Hindsight memory backend
+# (formerly Gemini) — both moved off GEMINI_API_KEY onto QWEN_API_KEY. The
+# bundled catalog only exposes Qwen models through amazon-bedrock (AWS
+# credentials) or nvidia (NVIDIA_API_KEY), neither of which authenticates
+# with a DashScope key directly, so a custom provider entry is required the
+# same way the retired DeepSeek R1 entry above was. See AGENTS.md's routing
+# rule 1 and "Memory (Hindsight)" section for the full rationale.
+#
 # NOTE: image generation (FLUX.1) is NOT configured here. models.yml only
 # registers chat/completion models; FLUX.1 on NVIDIA Build is a REST image API
 # (Visual GenAI NIM), so it ships as ~/.omp/agent/scripts/flux.py + /flux.
@@ -18,4 +28,22 @@
 # No custom providers/models currently registered. Add entries under
 # `providers:` only for models the bundled catalog doesn't ship.
 
-providers: {}
+providers:
+  qwen:
+    baseUrl: https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+    apiKey: QWEN_API_KEY
+    api: openai-completions
+    models:
+      - id: qwen3.8-max
+        name: Qwen3.8 Max
+        reasoning: true
+        input: [text]
+        contextWindow: 1000000
+        maxTokens: 131072
+        cost:
+          input: 2.00
+          output: 6.00
+          cacheRead: 0
+          cacheWrite: 0
+        compat:
+          thinkingFormat: qwen

@@ -2,10 +2,10 @@
 
 ## Primary Policy
 Preserve native Claude Pro / Cowork quota by delegating heavy scanning, review, and test
-generation tasks to Gemini, DeepSeek, and NVIDIA-hosted Nemotron.
+generation tasks to Qwen, DeepSeek, and NVIDIA-hosted Nemotron.
 
 ## Default Rule
-Coding work is distributed to an integrated AI (currently DeepSeek or Gemini) **by default**. Only keep a coding task on the native agent session when one of these exceptions applies:
+Coding work is distributed to an integrated AI (currently DeepSeek or Qwen) **by default**. Only keep a coding task on the native agent session when one of these exceptions applies:
 - The delegated AI cannot handle the task (unfamiliar framework/convention, needs context too large or too specific to hand off cleanly, output quality is unreliable for the task at hand).
 - The task needs fine-grained precision control (exact schema/spec adherence where a subtly-wrong output is costly to catch, intricate multi-step reasoning that must stay coherent with prior decisions in-session).
 - The task needs local file access, terminal execution, or git operations (writing to disk, running bench/build/test commands, commits, pushes).
@@ -36,26 +36,29 @@ this is the audited exception path the Default Rule requires; it is intentionall
 extra tool call) so it never blocks legitimate work, it only forces the decision onto the
 record instead of leaving it as an unstated judgment call.
 This hook does not, and cannot, judge whether ordinary new-feature coding work or
-documentation should have gone to `/deepseek` or `/gemini` -- that needs judging task
+documentation should have gone to `/deepseek` or `/qwen` -- that needs judging task
 *content*, not just a file path or a missing field. That part of the policy is enforced by
 the next paragraph and by your own judgment at plan time, not by pattern-matching.
 
-## Todo-Tagging Requirement
 When planning a multi-step dev task with the `todo` tool, tag each planned artifact with its
 intended route at `init` time, before creating anything -- e.g. `"Write Mission/Content
-PHPUnit tests [deepseek]"`, `"Audit auth.ts for race conditions [gemini]"`, `"Build Mission
+PHPUnit tests [deepseek]"`, `"Audit auth.ts for race conditions [qwen]"`, `"Build Mission
 CRUD modal [deepseek, exception: needs exact API-contract coherence with migrations written
 this session]"`. A todo item with no routing tag for coding/test/doc/audit work is an
 incomplete plan, not a native-by-default one -- decide the route when you scope the work,
 not retroactively when someone asks whether you followed the rule.
 
 ## Routing Rules
-1. **Repository Audits & Code Reviews -> `/gemini`**
-   - Use `/gemini` for large file reviews, monorepo context scanning, or reading massive log files.
-   - Dispatches via the `task` tool to the `gemini` OMP agent (`omp/agent/agents/gemini.md`,
-     `modelRoles.gemini` in `config.yml`, Google `gemini-3-pro-preview`).
-   - Example: `/gemini "Review the changes in src/ controller for security flaws."`
-   - Requires `GEMINI_API_KEY` in the shell environment or `~/.omp/agent/.env` (per machine, not committed).
+1. **Repository Audits & Code Reviews -> `/qwen`**
+   - Use `/qwen` for large file reviews, monorepo context scanning, or reading massive log files.
+   - Dispatches via the `task` tool to the `qwen` OMP agent (`omp/agent/agents/qwen.md`,
+     `modelRoles.qwen` in `config.yml`, Alibaba `qwen3.8-max` via a custom DashScope provider
+     registered in `models.yml` — the bundled catalog only reaches Qwen through amazon-bedrock
+     or nvidia credentials, neither of which authenticates with a DashScope key).
+   - Example: `/qwen "Review the changes in src/ controller for security flaws."`
+   - Requires `QWEN_API_KEY` in the shell environment or `~/.omp/agent/.env` (per machine, not committed).
+   - (2026-09-12: migrated off Google `gemini-3.1-pro-preview`/`GEMINI_API_KEY`. The same swap
+     was applied to the Hindsight memory backend below — see "Memory (Hindsight)".)
 
 2. **Test Generation & Documentation -> `/deepseek`**
    - Use `/deepseek` for writing unit tests, docstrings, or routine feature boilerplate.
@@ -80,7 +83,7 @@ not retroactively when someone asks whether you followed the rule.
 5. **Second-Opinion Review -> `/nemotron`**
    - Use `/nemotron` to cross-check a diff, design decision, or debugging conclusion via
      NVIDIA-hosted `nvidia/nemotron-3-super-120b-a12b` before finalizing. It is
-     independently trained from Gemini/DeepSeek, so it catches blind spots a same-lineage
+     independently trained from Qwen/DeepSeek, so it catches blind spots a same-lineage
      reviewer (rules 1-3) would share.
    - Do not route primary audits, test generation, or first-pass debugging here — it is a
      checker, not a replacement for rules 1-3.
@@ -164,7 +167,8 @@ account is not `ton@servio.ph`.
 Autonomous memory is on (`memory.backend: hindsight` in `config.yml`) backed by a local
 `hindsight` Docker container that bootstrap.sh starts and keeps restarted
 (`ghcr.io/vectorize-io/hindsight:latest`, API on `localhost:8888`, UI on `localhost:9999`,
-Gemini as its LLM backend via `GEMINI_API_KEY` — no separate key needed). This is a
+Qwen (`qwen3.8-flash` via DashScope) as its LLM backend via `QWEN_API_KEY` — no separate
+key needed; migrated off Gemini/`GEMINI_API_KEY` 2026-09-12). This is a
 background system, not a manual workflow:
 - `recall`/`retain`/`reflect` tools are exposed automatically; the primary session
   auto-recalls on its first turn and auto-retains conversation turns periodically.

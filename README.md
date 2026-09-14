@@ -17,7 +17,7 @@ Run once per machine:
 ```sh
 ./bootstrap.sh
 ```
-This installs `jq`/the Gemini CLI, symlinks Claude Code + OMP config, starts a
+This installs `jq`/the Qwen Code CLI, symlinks Claude Code + OMP config, starts a
 `hindsight` Docker container for OMP's autonomous memory (seeded from the last
 snapshot pushed to this repo, if any — see `omp/agent/scripts/sync-hindsight-memory.sh`),
 wires `~/.bashrc`/`~/.zshrc`, and sets `core.hooksPath` globally. Every step is
@@ -58,7 +58,7 @@ including the automatic `session_shutdown` push hook and the `mem-push` /
 
 ## Task routing (Claude Code / OMP)
 See `omp/agent/AGENTS.md` for the full token-preservation routing policy
-(`/gemini`, `/deepseek`, `/deepseek-r`, `/nemotron`, `/diagram`, `/flux`) and
+(`/qwen`, `/deepseek`, `/deepseek-r`, `/nemotron`, `/diagram`, `/flux`) and
 other project conventions. The policy is mechanically enforced, not just
 documented: `omp/agent/hooks/pre/routing-guard.ts` blocks direct test-file
 writes, `task` dispatches with no `agent` set, and prod-deploy commands run

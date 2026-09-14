@@ -85,30 +85,38 @@ if ! command -v jq &> /dev/null; then
     fi
 fi
 
-# 1b. Install the Gemini CLI (required by claude/commands/gemini.md; OMP's own
-# "gemini" agent talks to the Google API directly and does not need this CLI).
+# 1b. Install the Qwen Code CLI (required by claude/commands/qwen.md; OMP's own
+# "qwen" agent talks to the DashScope API directly and does not need this CLI).
 # Best-effort: an install failure here (flaky registry, or npm's refusal to
 # run under WSL 1) must not abort the rest of bootstrap via `set -e`, which
 # also sets up the independent OMP environment below.
-if ! command -v gemini &> /dev/null; then
-    echo "📦 Installing @google/gemini-cli..."
-    if ! npm install -g @google/gemini-cli; then
-        echo "⚠️  @google/gemini-cli install failed — Claude Code's /gemini command won't work here (OMP's /gemini agent is unaffected). If this is WSL 1, npm refuses to run under it: upgrade with 'wsl --set-version <distro> 2' from Windows, then re-run $SCRIPT_NAME."
+if ! command -v qwen &> /dev/null; then
+    echo "📦 Installing @qwen-code/qwen-code..."
+    if ! npm install -g @qwen-code/qwen-code@latest; then
+        echo "⚠️  @qwen-code/qwen-code install failed — Claude Code's /qwen command won't work here (OMP's /qwen agent is unaffected). If this is WSL 1, npm refuses to run under it: upgrade with 'wsl --set-version <distro> 2' from Windows, then re-run $SCRIPT_NAME."
     fi
 fi
 
-# 1c. Force the Gemini CLI to use GEMINI_API_KEY instead of OAuth.
-# On first run it defaults ~/.gemini/settings.json to "oauth-personal", which
-# silently ignores GEMINI_API_KEY and fails with a 401 "expected OAuth 2 access
-# token" error. Merge (not overwrite) so any other gemini CLI settings survive.
-mkdir -p "$HOME/.gemini"
-if [ -f "$HOME/.gemini/settings.json" ]; then
-    jq '.security.auth.selectedType = "gemini-api-key"' "$HOME/.gemini/settings.json" \
-        > "$HOME/.gemini/settings.json.tmp" && mv "$HOME/.gemini/settings.json.tmp" "$HOME/.gemini/settings.json"
+# 1c. Point the Qwen Code CLI at DashScope via a custom OpenAI-compatible
+# model provider, so it authenticates with QWEN_API_KEY instead of the
+# (now-discontinued) Qwen OAuth flow. Merge (not overwrite) so any other
+# qwen CLI settings survive. Unlike the old Gemini CLI, Qwen Code's
+# Trusted Folders per-directory prompt is disabled by default — this never
+# sets security.folderTrust, so there is no trust dialog to bypass for the
+# headless invocation in claude/commands/qwen.md.
+mkdir -p "$HOME/.qwen"
+QWEN_PROVIDER_JSON='{"id":"qwen3.8-max","name":"Qwen3.8 Max (DashScope)","baseUrl":"https://dashscope-intl.aliyuncs.com/compatible-mode/v1","envKey":"QWEN_API_KEY"}'
+if [ -f "$HOME/.qwen/settings.json" ]; then
+    jq --argjson provider "$QWEN_PROVIDER_JSON" \
+        '.modelProviders.openai = [$provider] | .security.auth.selectedType = "openai" | .model.name = $provider.id' \
+        "$HOME/.qwen/settings.json" \
+        > "$HOME/.qwen/settings.json.tmp" && mv "$HOME/.qwen/settings.json.tmp" "$HOME/.qwen/settings.json"
 else
-    echo '{"security":{"auth":{"selectedType":"gemini-api-key"}}}' > "$HOME/.gemini/settings.json"
+    jq -n --argjson provider "$QWEN_PROVIDER_JSON" \
+        '{modelProviders: {openai: [$provider]}, security: {auth: {selectedType: "openai"}}, model: {name: $provider.id}}' \
+        > "$HOME/.qwen/settings.json"
 fi
-echo "✅ Set Gemini CLI auth type to gemini-api-key"
+echo "✅ Set Qwen Code CLI auth to DashScope via QWEN_API_KEY"
 
 # 2. Ensure ~/.claude directory exists
 mkdir -p "$HOME/.claude"
@@ -137,7 +145,7 @@ if [ -d "$DOTFILES_DIR/claude/scripts" ]; then
     echo "✅ Linked ~/.claude/scripts"
     if [ -f "$DOTFILES_DIR/claude/scripts/package.json" ] && command -v npm &> /dev/null; then
         echo "📦 Installing scripts/ dependencies..."
-        # Best-effort like the Gemini CLI install above: on Windows, some
+        # Best-effort like the Qwen Code CLI install above: on Windows, some
         # npm-installed package's own lifecycle script can shell out to a
         # bare `bash`/`sh` that resolves (via PATH) to the legacy
         # C:\Windows\System32\bash.exe WSL1 launcher instead of Git Bash,
@@ -273,9 +281,9 @@ fi
 # see omp/agent/config.yml and AGENTS.md's "Memory (Hindsight)" section).
 # Idempotent: does nothing if a `hindsight` container already exists
 # (start/restart a stopped one yourself; this never recreates or updates
-# it in place). Uses Gemini as the LLM backend so no new provider
-# dependency is introduced beyond GEMINI_API_KEY, already required for
-# /gemini (AGENTS.md routing rule 1). Named Docker volume (not a host bind
+# it in place). Uses Qwen as the LLM backend so no new provider
+# dependency is introduced beyond QWEN_API_KEY, already required for
+# /qwen (AGENTS.md routing rule 1). Named Docker volume (not a host bind
 # mount) so the embedded Postgres (pg0) just works — no UID 1000
 # permission setup needed.
 if command -v docker &> /dev/null; then
@@ -283,17 +291,18 @@ if command -v docker &> /dev/null; then
         # Match check_api_key's precedence below (step 10): a key placed
         # only in ~/.omp/agent/.env — the designated per-machine secrets
         # file — must be enough to start Hindsight, not just the shell env.
-        HINDSIGHT_GEMINI_KEY="$GEMINI_API_KEY"
-        if [ -z "$HINDSIGHT_GEMINI_KEY" ] && [ -f "$HOME/.omp/agent/.env" ]; then
-            HINDSIGHT_GEMINI_KEY="$(grep -E '^GEMINI_API_KEY=' "$HOME/.omp/agent/.env" | tail -1 | cut -d= -f2- | sed -E 's/^"(.*)"$/\1/')"
+        HINDSIGHT_QWEN_KEY="$QWEN_API_KEY"
+        if [ -z "$HINDSIGHT_QWEN_KEY" ] && [ -f "$HOME/.omp/agent/.env" ]; then
+            HINDSIGHT_QWEN_KEY="$(grep -E '^QWEN_API_KEY=' "$HOME/.omp/agent/.env" | tail -1 | cut -d= -f2- | sed -E 's/^"(.*)"$/\1/')"
         fi
-        if [ -n "$HINDSIGHT_GEMINI_KEY" ]; then
+        if [ -n "$HINDSIGHT_QWEN_KEY" ]; then
             echo "🧠 Starting Hindsight memory server..."
             if docker run -d --pull always --name hindsight --restart unless-stopped \
                 -p 8888:8888 -p 9999:9999 \
-                -e HINDSIGHT_API_LLM_PROVIDER=gemini \
-                -e HINDSIGHT_API_LLM_API_KEY="$HINDSIGHT_GEMINI_KEY" \
-                -e HINDSIGHT_API_LLM_MODEL=gemini-3-flash-preview \
+                -e HINDSIGHT_API_LLM_PROVIDER=openai \
+                -e HINDSIGHT_API_LLM_API_KEY="$HINDSIGHT_QWEN_KEY" \
+                -e HINDSIGHT_API_LLM_MODEL=qwen3.8-flash \
+                -e HINDSIGHT_API_LLM_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1 \
                 -e HINDSIGHT_API_WORKER_ID=hindsight-omp \
                 -v hindsight-data:/home/hindsight/.pg0 \
                 ghcr.io/vectorize-io/hindsight:latest > /dev/null; then
@@ -312,7 +321,7 @@ if command -v docker &> /dev/null; then
                 echo "⚠️  Failed to start Hindsight — check 'docker logs hindsight'."
             fi
         else
-            echo "ℹ️  Skipping Hindsight memory server: GEMINI_API_KEY not set in this shell or ~/.omp/agent/.env."
+            echo "ℹ️  Skipping Hindsight memory server: QWEN_API_KEY not set in this shell or ~/.omp/agent/.env."
         fi
     else
         echo "ℹ️  Hindsight container already exists — leaving it as-is (docker start/restart it yourself if stopped)."
@@ -386,7 +395,7 @@ mkdir -p "$HOME/.omp/agent"
 echo "$DOTFILES_DIR/$SCRIPT_NAME" > "$HOME/.omp/agent/.bootstrap-variant"
 echo "✅ Set active bootstrap variant for future logins: $SCRIPT_NAME"
 
-# 10. API keys for the AGENTS.md task-routing agents (nemotron, gemini, deepseek,
+# 10. API keys for the AGENTS.md task-routing agents (nemotron, qwen, deepseek,
 # deepseek-r, diagram) and the /flux script are per-machine, not committed. OMP
 # environment first, then ~/.omp/agent/.env — either location satisfies the agent.
 # Remind rather than fail if a key is in neither place.
@@ -401,7 +410,7 @@ check_api_key() {
     echo "⚠️  ${var_name} not found (shell env or ~/.omp/agent/.env) — add it manually to use ${agent_hint}."
 }
 check_api_key NVIDIA_API_KEY "nvapi-" "/nemotron, /diagram, and /flux"
-check_api_key GEMINI_API_KEY "" "/gemini"
+check_api_key QWEN_API_KEY "" "/qwen"
 check_api_key DEEPSEEK_API_KEY "sk-" "/deepseek and /deepseek-r"
 
 # 10a. Verify the Anthropic OAuth account priority documented in AGENTS.md's

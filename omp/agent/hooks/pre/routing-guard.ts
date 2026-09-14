@@ -74,7 +74,7 @@ export default function routingGuard(omp: HookAPI): void {
           reason:
             'Routing policy (AGENTS.md Default Rule): every tasks[] item must set an ' +
             'explicit "agent" -- never omit it and rely on the spawn-policy default. Try ' +
-            '"deepseek" or "gemini" first for coding/test/doc work per the Default Rule; ' +
+            '"deepseek" or "qwen" first for coding/test/doc work per the Default Rule; ' +
             'set agent to "task" explicitly (not omitted) only when a stated exception ' +
             'applies (local file/git access, precision-critical, delegated AI unsuitable). ' +
             'Add a "[routing:<reason>]" tag to the intent to note the exception, or set agent.',
