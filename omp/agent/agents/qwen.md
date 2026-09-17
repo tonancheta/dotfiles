@@ -1,7 +1,7 @@
 ---
-name: gemini
-description: Large-context repository audit and code review via Google Gemini. Use for monorepo-wide scans, large diffs, or reading massive files/logs that would burn native context budget.
-model: "@gemini"
+name: qwen
+description: Large-context repository audit and code review via Alibaba Qwen. Use for monorepo-wide scans, large diffs, or reading massive files/logs that would burn native context budget.
+model: "@qwen"
 tools: read, grep, glob, lsp
 ---
 

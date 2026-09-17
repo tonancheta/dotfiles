@@ -2,23 +2,63 @@
 
 ## Primary Policy
 Preserve native Claude Pro / Cowork quota by delegating heavy scanning, review, and test
-generation tasks to Gemini, DeepSeek, and NVIDIA-hosted Nemotron.
+generation tasks to Qwen, DeepSeek, and NVIDIA-hosted Nemotron.
 
 ## Default Rule
-Coding work is distributed to an integrated AI (currently DeepSeek or Gemini) **by default**. Only keep a coding task on the native agent session when one of these exceptions applies:
+Coding work is distributed to an integrated AI (currently DeepSeek or Qwen) **by default**. Only keep a coding task on the native agent session when one of these exceptions applies:
 - The delegated AI cannot handle the task (unfamiliar framework/convention, needs context too large or too specific to hand off cleanly, output quality is unreliable for the task at hand).
 - The task needs fine-grained precision control (exact schema/spec adherence where a subtly-wrong output is costly to catch, intricate multi-step reasoning that must stay coherent with prior decisions in-session).
 - The task needs local file access, terminal execution, or git operations (writing to disk, running bench/build/test commands, commits, pushes).
 
-This is a default, not an absolute — judgment calls in either direction are fine, but the starting assumption for any new coding task should be "can this go to DeepSeek or Gemini first?" not "let me just do this directly."
+This is the enforced default, not free judgment. A long session has no natural checkpoint
+where "should this specific file have been delegated?" gets re-asked, so silent drift back
+to "just do it myself" is the expected failure mode, not a hypothetical one -- it happened
+across a full feature build before this section existed. Deviating from the default MUST be
+a stated decision, not a silent one: name which exception applies, in the open, before
+acting -- either by narrating it, or, for the categories below that are mechanically
+checked, by tagging the tool call's intent with `[routing:<reason>]`.
+
+## Enforcement
+`omp/agent/hooks/pre/routing-guard.ts` (a `tool_call` pre-hook, loaded on every session from
+`~/.omp/agent/hooks/pre/`) mechanically blocks the three violations that actually occurred
+and are cheaply detectable from tool-call shape alone:
+1. **Writing or editing a test file directly** (path matches a `tests?/`, `__tests__/`, or
+   `spec/` directory, or a `.test.`/`.spec.`/`Test.<ext>`/`_test.<ext>`/`_spec.<ext>` filename)
+   instead of dispatching it to `/deepseek` (rule 2).
+2. **A `task` dispatch that omits `agent`** and silently rides the spawn-policy default,
+   instead of explicitly choosing a model per the Default Rule.
+3. **A production/shared-environment deploy command** (`docker compose -f *prod*.yml ... up`,
+   `kubectl apply`/`rollout`, `git push origin main`/`master`) run before a `/nemotron`
+   second opinion this session (rule 5).
+Each block names the rule and tells you exactly how to comply or to bypass with a stated
+reason. **Add `[routing:<reason>]` to the tool call's `i` (intent) argument to bypass** --
+this is the audited exception path the Default Rule requires; it is intentionally cheap (no
+extra tool call) so it never blocks legitimate work, it only forces the decision onto the
+record instead of leaving it as an unstated judgment call.
+This hook does not, and cannot, judge whether ordinary new-feature coding work or
+documentation should have gone to `/deepseek` or `/qwen` -- that needs judging task
+*content*, not just a file path or a missing field. That part of the policy is enforced by
+the next paragraph and by your own judgment at plan time, not by pattern-matching.
+
+When planning a multi-step dev task with the `todo` tool, tag each planned artifact with its
+intended route at `init` time, before creating anything -- e.g. `"Write Mission/Content
+PHPUnit tests [deepseek]"`, `"Audit auth.ts for race conditions [qwen]"`, `"Build Mission
+CRUD modal [deepseek, exception: needs exact API-contract coherence with migrations written
+this session]"`. A todo item with no routing tag for coding/test/doc/audit work is an
+incomplete plan, not a native-by-default one -- decide the route when you scope the work,
+not retroactively when someone asks whether you followed the rule.
 
 ## Routing Rules
-1. **Repository Audits & Code Reviews -> `/gemini`**
-   - Use `/gemini` for large file reviews, monorepo context scanning, or reading massive log files.
-   - Dispatches via the `task` tool to the `gemini` OMP agent (`omp/agent/agents/gemini.md`,
-     `modelRoles.gemini` in `config.yml`, Google `gemini-3-pro-preview`).
-   - Example: `/gemini "Review the changes in src/ controller for security flaws."`
-   - Requires `GEMINI_API_KEY` in the shell environment or `~/.omp/agent/.env` (per machine, not committed).
+1. **Repository Audits & Code Reviews -> `/qwen`**
+   - Use `/qwen` for large file reviews, monorepo context scanning, or reading massive log files.
+   - Dispatches via the `task` tool to the `qwen` OMP agent (`omp/agent/agents/qwen.md`,
+     `modelRoles.qwen` in `config.yml`, Alibaba `qwen3.8-max` via a custom DashScope provider
+     registered in `models.yml` — the bundled catalog only reaches Qwen through amazon-bedrock
+     or nvidia credentials, neither of which authenticates with a DashScope key).
+   - Example: `/qwen "Review the changes in src/ controller for security flaws."`
+   - Requires `QWEN_API_KEY` in the shell environment or `~/.omp/agent/.env` (per machine, not committed).
+   - (2026-09-12: migrated off Google `gemini-3.1-pro-preview`/`GEMINI_API_KEY`. The same swap
+     was applied to the Hindsight memory backend below — see "Memory (Hindsight)".)
 
 2. **Test Generation & Documentation -> `/deepseek`**
    - Use `/deepseek` for writing unit tests, docstrings, or routine feature boilerplate.
@@ -26,6 +66,8 @@ This is a default, not an absolute — judgment calls in either direction are fi
      `modelRoles.deepseek` in `config.yml`, `deepseek-v4-flash`).
    - Example: `/deepseek "Write Jest unit tests for services/auth.ts."`
    - Requires `DEEPSEEK_API_KEY` in the shell environment or `~/.omp/agent/.env` (per machine, not committed).
+   - **Enforced for tests**: `write`/`edit` calls targeting a test-shaped path are blocked by
+     `routing-guard.ts` unless dispatched this way or tagged `[routing:<reason>]` — see Enforcement above.
 
 3. **Complex Logic & Debugging -> `/deepseek-r`**
    - Use `/deepseek-r` for heavy algorithmic reasoning or complex bug investigations.
@@ -40,8 +82,8 @@ This is a default, not an absolute — judgment calls in either direction are fi
 
 5. **Second-Opinion Review -> `/nemotron`**
    - Use `/nemotron` to cross-check a diff, design decision, or debugging conclusion via
-     NVIDIA-hosted `nvidia/llama-3.3-nemotron-super-49b-v1.5` before finalizing. It is
-     independently trained from Gemini/DeepSeek, so it catches blind spots a same-lineage
+     NVIDIA-hosted `nvidia/nemotron-3-super-120b-a12b` before finalizing. It is
+     independently trained from Qwen/DeepSeek, so it catches blind spots a same-lineage
      reviewer (rules 1-3) would share.
    - Do not route primary audits, test generation, or first-pass debugging here — it is a
      checker, not a replacement for rules 1-3.
@@ -49,6 +91,9 @@ This is a default, not an absolute — judgment calls in either direction are fi
      `modelRoles.nemotron` in `config.yml`).
    - Example: `/nemotron "Check this auth diff for race conditions and edge cases."`
    - Requires `NVIDIA_API_KEY` in the shell environment or `~/.omp/agent/.env` (per machine, not committed).
+   - **Enforced before deploy**: `routing-guard.ts` blocks prod-compose/`kubectl`/`git push
+     origin main`-shaped commands until a `/nemotron` dispatch has run this session, or the
+     command is tagged `[routing:<reason>]` — see Enforcement above.
 
 6. **Technical Diagrams -> `/diagram`**
    - Use `/diagram` to turn architecture, flows, sequences, ER models, or state
@@ -72,11 +117,58 @@ This is a default, not an absolute — judgment calls in either direction are fi
    - Example: `/flux "isometric 3D icon of a database, soft studio lighting" --width 1024 --height 1024`
    - Requires `NVIDIA_API_KEY` in the shell environment or `~/.omp/agent/.env` (per machine, not committed).
 
+# Anthropic Account Priority
+`ton@servio.ph` is intended to be the primary account for development sessions;
+`antonio.ancheta@santenewzealand.com` (SanteDev) is secondary/fallback. OMP exposes
+no `modelRoles`/`config.yml` setting to pin which OAuth account `anthropic/*` models
+use — confirmed against the full `omp config list --json` schema (no account-priority
+key exists among its ~489 settings) and `providers.md`'s credential-precedence docs
+("multiple accounts are ranked and rotated automatically", no user-facing override).
+Per that precedence order, a stored OAuth credential always outranks
+`ANTHROPIC_API_KEY`/`ANTHROPIC_OAUTH_TOKEN`, so an env var cannot force one account
+over another either.
+
+**What does NOT determine selection (disproven 2026-09-10):** an earlier version of
+this section claimed the first-registered (lowest-`id`) credential in
+`~/.omp/agent/agent.db`'s `auth_credentials` table was primary. `omp dry-balance
+anthropic/claude-sonnet-5 --count 200 --json` disproves this: 200/200 random session
+ids resolved to `antonio.ancheta@santenewzealand.com`, 0 to `ton@servio.ph` — despite
+`ton@servio.ph` being `id=2` (registered 2026-08-15) vs. the other's `id=3`
+(2026-09-03). `id` order is not the mechanism. `omp usage` corroborates this: as of
+2026-09-10, `ton@servio.ph` shows 0% used on both the 5h and 7-day windows (zero
+traffic in a week) while the Sante account shows real consumption.
+
+The actual selection logic is closed-source (compiled binary, no accessible
+package source) and remains genuinely unverified after two disproved theories.
+**Second disproof (2026-09-10, same day):** re-authenticating the Sante account
+(a fresh `/login anthropic` as Sante) left its `authorizedAt` unchanged, yet a
+subsequent `dry-balance` run flipped to 200/200 `ton@servio.ph` — so
+"most-recently-authorized wins" is also false. The earlier "servio.ph shows 0%
+used all week" reading was likely an artifact of `omp usage`'s 7-day window
+resetting right around when it was first checked: a follow-up check minutes later
+showed real, split traffic on both accounts (servio 13%/2%, Sante 19%/0% on the
+5h/7d windows). Selection may be more dynamic/quota-aware than a sticky pin, or
+depend on an internal rotation cursor not visible from `agent.db` or `omp usage`.
+Do not add a third unverified theory here — if you need to know which account is
+active, ask `omp dry-balance <model> --count 200 --json` directly; it is the only
+reliable, repeatable ground truth found so far, and it can change between runs.
+
+Because there is no config-level lever, the only **verified, guaranteed** fix when
+the wrong account wins is exclusivity, not priority: `/logout anthropic` and keep
+only `ton@servio.ph` logged in. Restarting OMP does NOT help on its own —
+`dry-balance` already simulates fresh random session ids and still resolved 100% to
+the wrong account, so a new session is not guaranteed a different outcome.
+
+`bootstrap.sh` step 10a checks this on every run using `omp dry-balance` itself as
+ground truth (read-only, never edits `agent.db` or config) and warns if the winning
+account is not `ton@servio.ph`.
+
 # Memory (Hindsight)
 Autonomous memory is on (`memory.backend: hindsight` in `config.yml`) backed by a local
 `hindsight` Docker container that bootstrap.sh starts and keeps restarted
 (`ghcr.io/vectorize-io/hindsight:latest`, API on `localhost:8888`, UI on `localhost:9999`,
-Gemini as its LLM backend via `GEMINI_API_KEY` — no separate key needed). This is a
+Qwen (`qwen3.8-flash` via DashScope) as its LLM backend via `QWEN_API_KEY` — no separate
+key needed; migrated off Gemini/`GEMINI_API_KEY` 2026-09-12). This is a
 background system, not a manual workflow:
 - `recall`/`retain`/`reflect` tools are exposed automatically; the primary session
   auto-recalls on its first turn and auto-retains conversation turns periodically.
@@ -94,7 +186,11 @@ background system, not a manual workflow:
   - `pull`: `git pull` -> `hindsight-admin restore --yes` into the running container.
     bootstrap.sh runs this automatically, but ONLY right after starting a brand-new
     empty container (step 8h) — it never touches an already-populated one, so a
-    normal bootstrap.sh re-run can't clobber local data.
+    normal bootstrap.sh re-run can't clobber local data. `bootstrap-new.sh` (repo
+    root) is a variant that starts Hindsight the same way but deliberately skips
+    this pull, so a fresh container comes up empty instead of seeded from the
+    last-pushed snapshot — use it when you want this machine's memory bank to
+    start clean rather than inherit the shared one.
   - `omp/agent/hooks/post/hindsight-sync.ts` best-effort auto-pushes in the
     background on every omp `session_shutdown` (failures are silent — logged to
     `~/.omp/agent/scripts/hindsight-sync.log`, not surfaced). `mem-push`/`mem-pull`
@@ -104,6 +200,14 @@ background system, not a manual workflow:
     working on machine B without pulling A's snapshot first, then pushing from B,
     silently discards A's un-pushed memories — git has no visibility into the zip's
     contents to warn you. Pull before you start on any machine; push when you're done.
+  - **Which variant runs on future logins is switchable, not fixed.** Both
+    scripts' step 9c/9d write `~/.omp/agent/.bootstrap-variant` with their own
+    path and register `bootstrap-autorun.sh` (repo root) in `~/.bashrc`/
+    `~/.zshrc`. On each new interactive shell, `bootstrap-autorun.sh` re-runs
+    whichever script that state file names, at most once per calendar day, in
+    the background (log: `~/.omp/agent/bootstrap-autorun.log`). So running
+    `bootstrap-new.sh` once makes it the one that keeps running on subsequent
+    logins; running plain `bootstrap.sh` again switches it back.
 
 (Previously graphify's per-repo knowledge-graph skill filled this role. Removed:
 redundant with Hindsight, and its skill discovery was independently found to be

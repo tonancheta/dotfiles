@@ -4,17 +4,17 @@
 # — merge any new shared keys here by hand instead of symlinking this file
 # wholesale over an existing config.yml.
 modelRoles:
-  nemotron: nvidia/llama-3.3-nemotron-super-49b-v1.5:high
-  gemini: google/gemini-3.1-pro-preview:high
+  nemotron: nvidia/nemotron-3-super-120b-a12b:high
+  qwen: qwen/qwen3.8-max:high
   deepseek: deepseek/deepseek-v4-flash:low
   deepseek-r: deepseek/deepseek-v4-pro:max
   diagram: nvidia/nemotron-3-ultra-550b-a55b:high
 
 # Memory: Hindsight-backed autonomous memory (see omp/agent/AGENTS.md's
 # "Memory (Hindsight)" section for the full setup). bootstrap.sh starts a
-# local `hindsight` Docker container (Gemini as its LLM backend, reusing
-# GEMINI_API_KEY — no new provider dependency) on every machine that has
-# docker + GEMINI_API_KEY; this block just points OMP at it. No apiToken:
+# local `hindsight` Docker container (Qwen as its LLM backend, reusing
+# QWEN_API_KEY — no new provider dependency) on every machine that has
+# docker + QWEN_API_KEY; this block just points OMP at it. No apiToken:
 # the local container has no auth configured.
 memory:
   backend: hindsight
