@@ -199,26 +199,46 @@ background system, not a manual workflow:
   project's memories don't bleed into an unrelated repo's recall.
 - The Hindsight database itself is per-machine (a local `hindsight-data` Docker
   volume) — it does NOT sync across machines on its own. Cross-machine sync goes
-  through this dotfiles repo, via `omp/agent/scripts/sync-hindsight-memory.sh`:
-  - `push`: `hindsight-admin backup` the running container -> `omp/hindsight-backup.zip`
-    -> commit -> `git push`.
-  - `pull`: `git pull` -> `hindsight-admin restore --yes` into the running container.
-    bootstrap.sh runs this automatically, but ONLY right after starting a brand-new
-    empty container (step 8h) — it never touches an already-populated one, so a
-    normal bootstrap.sh re-run can't clobber local data. `bootstrap-new.sh` (repo
-    root) is a variant that starts Hindsight the same way but deliberately skips
-    this pull, so a fresh container comes up empty instead of seeded from the
-    last-pushed snapshot — use it when you want this machine's memory bank to
-    start clean rather than inherit the shared one.
+  through this dotfiles repo, via `omp/agent/scripts/sync-hindsight-memory.sh`,
+  which is merge-aware, not overwrite-only (rewritten 2026-09-25 after a
+  `--ours`-wins conflict resolution on `omp/hindsight-backup.zip` silently
+  discarded a day of another machine's memories — see that incident's fix
+  commit for the row-count evidence):
+  - `push`: pull-merges first (below), then `hindsight-admin backup` the
+    running container -> `omp/hindsight-backup.zip` -> commit -> `git push`,
+    retrying the merge-then-push cycle up to 3x if another machine's push
+    races it.
+  - `pull`: `git fetch` + merge the upstream branch, then reconcile the
+    incoming snapshot into the live container at the **row level** —
+    `INSERT ... ON CONFLICT DO NOTHING` per table, in the archive's own
+    FK-safe order, via a disposable scratch container — instead of
+    `hindsight-admin restore --yes`'s full wipe-and-replace. No
+    DELETE/TRUNCATE/UPDATE ever runs against the live database, so
+    concurrent work on two machines without pulling in between is safe:
+    both sides' memories survive the next sync either direction. The one
+    exception is a container verified empty (`live_is_empty`, e.g. right
+    after `bootstrap.sh` step 8h creates a brand-new one) — nothing to
+    lose there, so a direct `restore --yes` is used since it's equivalent
+    and cheaper than merging into nothing.
+  - A **git-level conflict** on `omp/hindsight-backup.zip` (both machines
+    committed independently before either saw the other's push — a binary
+    file, so git can't line-merge it) is handled the same way: `pull`
+    extracts the incoming side via `git show ":3:omp/hindsight-backup.zip"`,
+    row-level-merges it into the live container, regenerates the backup from
+    the now-merged container as the resolution, and completes the merge
+    commit automatically. Any conflict touching a file *other* than the
+    backup zip is left for manual resolution (the script exits with
+    `MERGE_HEAD` still set rather than guessing).
   - `omp/agent/hooks/post/hindsight-sync.ts` best-effort auto-pushes in the
     background on every omp `session_shutdown` (failures are silent — logged to
     `~/.omp/agent/scripts/hindsight-sync.log`, not surfaced). `mem-push`/`mem-pull`
     shell aliases (step 9b) run the same script manually when you want to see
     success/failure live, e.g. before switching machines mid-day.
-  - **This is a full snapshot overwrite, not a merge.** Working on machine A, then
-    working on machine B without pulling A's snapshot first, then pushing from B,
-    silently discards A's un-pushed memories — git has no visibility into the zip's
-    contents to warn you. Pull before you start on any machine; push when you're done.
+  - Working across multiple environments concurrently no longer requires the
+    old "pull before you start, push when you're done" discipline for
+    correctness — the merge is safe either way — but pulling first still
+    avoids the cost of a scratch-container reconciliation on your next push
+    and keeps your local container's recall results current sooner.
   - **Which variant runs on future logins is switchable, not fixed.** Both
     scripts' step 9c/9d write `~/.omp/agent/.bootstrap-variant` with their own
     path and register `bootstrap-autorun.sh` (repo root) in `~/.bashrc`/
