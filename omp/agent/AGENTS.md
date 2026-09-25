@@ -153,11 +153,30 @@ Do not add a third unverified theory here — if you need to know which account 
 active, ask `omp dry-balance <model> --count 200 --json` directly; it is the only
 reliable, repeatable ground truth found so far, and it can change between runs.
 
+**2026-09-25 recheck:** `omp dry-balance anthropic/claude-sonnet-5 --count 200 --json`
+again resolved 200/200 to `ton@servio.ph`, consistent with the 2026-09-10 second-disproof
+result above. That's two checks in a row favoring `ton@servio.ph`, roughly two weeks apart
+— suggestive, but the same section already documented a same-day flip from 200/200 Sante to
+200/200 `ton@servio.ph` with no identified trigger, so two consistent readings do not
+promote this to a proven, permanent priority order. Treat each `dry-balance` result as valid
+only as of when it was run, not as a settled fact going forward.
+
 Because there is no config-level lever, the only **verified, guaranteed** fix when
-the wrong account wins is exclusivity, not priority: `/logout anthropic` and keep
-only `ton@servio.ph` logged in. Restarting OMP does NOT help on its own —
-`dry-balance` already simulates fresh random session ids and still resolved 100% to
-the wrong account, so a new session is not guaranteed a different outcome.
+the wrong account wins is exclusivity: `/logout anthropic` and keep only one account
+logged in. Restarting OMP does NOT help on its own — `dry-balance` already simulates
+fresh random session ids and still resolved 100% to the wrong account, so a new
+session is not guaranteed a different outcome.
+
+**Deliberate exception, decided 2026-09-25: do not recommend `/logout anthropic` on
+Sante as the default fix.** The user keeps `antonio.ancheta@santenewzealand.com`
+logged in on purpose as a fallback for when `ton@servio.ph` hits its usage limit —
+logging it out to force priority would remove that fallback entirely, which is a
+worse outcome than an unpredictable priority order. Since selection has no
+config-level lever and its dynamic/quota-aware behavior is unverified (see above),
+there's no way to guarantee "Servio first, Sante only as fallback" while both stay
+logged in — accept that tradeoff explicitly rather than solving it by removing the
+fallback. If Servio's priority is ever in doubt, check with `omp dry-balance` and
+`omp usage`; only suggest exclusivity if the user asks for it directly.
 
 `bootstrap.sh` step 10a checks this on every run using `omp dry-balance` itself as
 ground truth (read-only, never edits `agent.db` or config) and warns if the winning

@@ -356,6 +356,26 @@ for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
     fi
 done
 
+# 9a. Put bun's bin dir on PATH for every new shell. Needed for bun
+# installs done before this dotfiles bootstrap existed, or installed
+# manually outside it -- bun's own installer only patches rc files once,
+# at install time. Machine-agnostic: bun's default installer (curl
+# https://bun.sh/install | bash) puts it at ~/.bun/bin on macOS, Linux,
+# and WSL alike, and $HOME is kept literal (not expanded) in the written
+# line so the same rc line is correct on every account/machine rather
+# than baking in this run's absolute home dir. Native Windows (outside
+# WSL) is out of scope -- bun's Windows installer and PATH mechanism
+# differ and aren't bash-rc-based. Same self-healing rewrite pattern as
+# steps 9/9b/9c.
+BUN_PATH_LINE='export PATH="$HOME/.bun/bin:$PATH"'
+for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
+    if [ -f "$rc" ] && ! grep -qF "$BUN_PATH_LINE" "$rc"; then
+        sed -i.bak -e '/^# bun (dotfiles)$/d' -e '/^export PATH="\$HOME\/\.bun\/bin:\$PATH"$/d' "$rc" && rm -f "$rc.bak"
+        printf '\n# bun (dotfiles)\n%s\n' "$BUN_PATH_LINE" >> "$rc"
+        echo "✅ Added ~/.bun/bin to PATH in $rc"
+    fi
+done
+
 # 9b. mem-push / mem-pull aliases for scripts/sync-hindsight-memory.sh —
 # manual trigger alongside the automatic session_shutdown hook (step 8a2),
 # so a push you want to see succeed/fail live (e.g. before switching
