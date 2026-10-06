@@ -97,15 +97,22 @@ if ! command -v qwen &> /dev/null; then
     fi
 fi
 
-# 1c. Point the Qwen Code CLI at DashScope via a custom OpenAI-compatible
-# model provider, so it authenticates with QWEN_API_KEY instead of the
-# (now-discontinued) Qwen OAuth flow. Merge (not overwrite) so any other
-# qwen CLI settings survive. Unlike the old Gemini CLI, Qwen Code's
-# Trusted Folders per-directory prompt is disabled by default — this never
-# sets security.folderTrust, so there is no trust dialog to bypass for the
-# headless invocation in claude/commands/qwen.md.
+# 1c. Point the Qwen Code CLI at QwenCloud's Token Plan endpoint via a custom
+# OpenAI-compatible model provider, so it authenticates with QWEN_API_KEY
+# instead of the (now-discontinued) Qwen OAuth flow. Merge (not overwrite)
+# so any other qwen CLI settings survive. Unlike the old Gemini CLI, Qwen
+# Code's Trusted Folders per-directory prompt is disabled by default — this
+# never sets security.folderTrust, so there is no trust dialog to bypass for
+# the headless invocation in claude/commands/qwen.md.
+#
+# NOTE: `token-plan.maas.qwencloudapi.com` matches a Token Plan key
+# (`sk-sp-...` prefix, monthly-subscription/credits billing). A plain
+# pay-as-you-go key (`sk-...`, no `-sp-`) needs a dashscope.aliyuncs.com
+# base URL instead — the two are not interchangeable (confirmed live
+# 2026-09-12; see models.yml's matching note). Update baseUrl here AND in
+# models.yml AND step 8h below together if the key type ever changes.
 mkdir -p "$HOME/.qwen"
-QWEN_PROVIDER_JSON='{"id":"qwen3.8-max","name":"Qwen3.8 Max (DashScope)","baseUrl":"https://dashscope-intl.aliyuncs.com/compatible-mode/v1","envKey":"QWEN_API_KEY"}'
+QWEN_PROVIDER_JSON='{"id":"qwen3.8-max","name":"Qwen3.8 Max (Token Plan)","baseUrl":"https://token-plan.maas.qwencloudapi.com/compatible-mode/v1","envKey":"QWEN_API_KEY"}'
 if [ -f "$HOME/.qwen/settings.json" ]; then
     jq --argjson provider "$QWEN_PROVIDER_JSON" \
         '.modelProviders.openai = [$provider] | .security.auth.selectedType = "openai" | .model.name = $provider.id' \
@@ -116,7 +123,7 @@ else
         '{modelProviders: {openai: [$provider]}, security: {auth: {selectedType: "openai"}}, model: {name: $provider.id}}' \
         > "$HOME/.qwen/settings.json"
 fi
-echo "✅ Set Qwen Code CLI auth to DashScope via QWEN_API_KEY"
+echo "✅ Set Qwen Code CLI auth to QwenCloud Token Plan via QWEN_API_KEY"
 
 # 2. Ensure ~/.claude directory exists
 mkdir -p "$HOME/.claude"
@@ -297,12 +304,21 @@ if command -v docker &> /dev/null; then
         fi
         if [ -n "$HINDSIGHT_QWEN_KEY" ]; then
             echo "🧠 Starting Hindsight memory server..."
+            # enable_thinking:false is required, not cosmetic: qwen3.8-flash
+            # defaults to thinking mode on this endpoint, and DashScope/
+            # QwenCloud reject a forced tool_choice (which retain/reflect/
+            # consolidation all need for structured-output extraction) with
+            # 400 invalid_parameter_error while thinking is on. Confirmed
+            # live 2026-10-06: /memories/dry-run-extract and /reflect both
+            # 400'd until this was added, then returned 200 with
+            # thoughts_tokens=0.
             if docker run -d --pull always --name hindsight --restart unless-stopped \
                 -p 8888:8888 -p 9999:9999 \
                 -e HINDSIGHT_API_LLM_PROVIDER=openai \
                 -e HINDSIGHT_API_LLM_API_KEY="$HINDSIGHT_QWEN_KEY" \
                 -e HINDSIGHT_API_LLM_MODEL=qwen3.8-flash \
-                -e HINDSIGHT_API_LLM_BASE_URL=https://dashscope-intl.aliyuncs.com/compatible-mode/v1 \
+                -e HINDSIGHT_API_LLM_BASE_URL=https://token-plan.maas.qwencloudapi.com/compatible-mode/v1 \
+                -e HINDSIGHT_API_LLM_EXTRA_BODY='{"enable_thinking":false}' \
                 -e HINDSIGHT_API_WORKER_ID=hindsight-omp \
                 -v hindsight-data:/home/hindsight/.pg0 \
                 ghcr.io/vectorize-io/hindsight:latest > /dev/null; then

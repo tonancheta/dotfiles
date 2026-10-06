@@ -15,7 +15,7 @@ if (!process.env.QWEN_API_KEY) {
 
 const client = new OpenAI({
   apiKey: process.env.QWEN_API_KEY,
-  baseURL: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1",
+  baseURL: "https://token-plan.maas.qwencloudapi.com/compatible-mode/v1",
 });
 
 try {
