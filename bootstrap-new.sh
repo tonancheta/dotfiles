@@ -133,6 +133,50 @@ else
 fi
 echo "✅ Set Qwen Code CLI auth to QwenCloud Token Plan via QWEN_API_KEY"
 
+# 1d. Keep the omp CLI itself current. `omp update --check` is read-only
+# (confirmed live: prints "Current version: X" / "New version available: Y"
+# and exits 0 without touching the installed binary), so always run it first
+# to decide whether the real update is needed, then invoke `omp update
+# --force` only in that case -- skips a pointless reinstall round-trip on
+# every bootstrap run once a machine is already current. Best-effort like 1b
+# above: a flaky release-metadata fetch (e.g. GitHub rate limit; `omp
+# update`'s own --help documents the GITHUB_TOKEN/GH_TOKEN workaround) must
+# not abort the rest of bootstrap via `set -e`.
+if command -v omp &> /dev/null; then
+    if OMP_UPDATE_CHECK=$(omp update --check 2>&1); then
+        if echo "$OMP_UPDATE_CHECK" | grep -q "New version available"; then
+            echo "📦 Updating omp ($OMP_UPDATE_CHECK)..."
+            if ! omp update --force; then
+                echo "⚠️  omp update failed — update it manually with 'omp update'."
+            fi
+        else
+            echo "✅ omp is already up to date"
+        fi
+    else
+        echo "⚠️  omp update --check failed: $OMP_UPDATE_CHECK"
+    fi
+fi
+
+# 1e. Keep herdr (the terminal workspace manager these agent sessions
+# normally run inside) current too. Unlike omp, it ships no read-only
+# --check flag, so this runs the real `herdr update` directly. Confirmed
+# live: that command refuses to run (exit 1, with an explicit message
+# naming the fix) when invoked from inside an active herdr-managed session
+# -- the normal case for a bootstrap run from one of these agent sessions --
+# so that specific, expected failure is surfaced as information rather than
+# a warning; the message already tells the user to re-run after detaching.
+# Any other failure is a real problem and is printed in full, never
+# swallowed.
+if command -v herdr &> /dev/null; then
+    if HERDR_UPDATE_OUTPUT=$(herdr update 2>&1); then
+        echo "✅ herdr: $HERDR_UPDATE_OUTPUT"
+    elif echo "$HERDR_UPDATE_OUTPUT" | grep -q "outside herdr"; then
+        echo "ℹ️  herdr: $HERDR_UPDATE_OUTPUT"
+    else
+        echo "⚠️  herdr update failed: $HERDR_UPDATE_OUTPUT"
+    fi
+fi
+
 # 2. Ensure ~/.claude directory exists
 mkdir -p "$HOME/.claude"
 
